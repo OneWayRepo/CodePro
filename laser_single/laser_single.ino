@@ -29,11 +29,18 @@ static const int LASER_735nm = 15;
 // Laser enable pin
 static const int LASER_Enable_pin   = 33;
 
+// TCM1040, TCM1041 module
+PacketSerial TCM_104x_PacketSerial
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(38400);
   sprintf(gtmpbuf, "%s %s", gtitle, gversion);
   Serial.println(gtmpbuf);
+
+  // add by wangwei 2024.01.31
+  // TCM104x module
+  Serial5.begin(57600);
 
   // add by wangwei 2024.01.29
   // enable pins
