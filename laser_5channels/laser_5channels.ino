@@ -6,9 +6,15 @@
 	\author	 kevin.wang
 	\note    none
 */
+#include <cstdlib>
+#include <cstdio>
 
 #include <PacketSerial.h>
 #include <FastLED.h>
+
+const char gtitle[] = "Lazer_5channels";
+const char gversion[] = "V1.00";
+char gtmpbuf[100];
 
 // Teensy4.1 board v2 def
 
@@ -25,6 +31,9 @@ static const int LASER_Enable_pin   = 33;
 
 void setup() {
   // put your setup code here, to run once:
+  Serial.begin(38400);
+  sprintf(gtmpbuf, "%s %s", gtitle, gversion);
+  Serial.println(gtmpbuf);
 
   // add by wangwei 2024.01.29
   // enable pins
