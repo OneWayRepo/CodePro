@@ -26,6 +26,10 @@ static const int LASER_470nm = 17;
 static const int LASER_638nm = 16;
 static const int LASER_735nm = 15;
 
+static const int OUTPUT1 = 36;
+static const int OUTPUT2 = 37;
+static const int OUTPUT3 = 38;
+
 // Laser enable pin
 static const int LASER_Enable_pin   = 33;
 
@@ -55,9 +59,29 @@ void setup() {
   // Laser enable pin
   pinMode(LASER_Enable_pin, OUTPUT);
   digitalWrite(LASER_Enable_pin ,HIGH);
+
+  pinMode(OUTPUT1, OUTPUT);
+  digitalWrite(OUTPUT1, LOW);
+
+  pinMode(OUTPUT2, OUTPUT);
+  digitalWrite(OUTPUT2, LOW);
+
+  pinMode(OUTPUT3, OUTPUT);
+  digitalWrite(OUTPUT3, LOW);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+  digitalWrite(OUTPUT1,HIGH);
+   delayMicroseconds(2000000);
+   digitalWrite(OUTPUT1,LOW);
+   
+  digitalWrite(OUTPUT2,HIGH);
+   delayMicroseconds(2000000);
+  digitalWrite(OUTPUT2,LOW);
+
+    digitalWrite(OUTPUT3,HIGH);
+   delayMicroseconds(2000000);
+  digitalWrite(OUTPUT3,LOW);
 
 }
