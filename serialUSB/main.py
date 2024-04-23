@@ -90,18 +90,24 @@ def send_to_serial(cmd):
     try:
         global_serial.write(cmd)
     except OSError as e:
-        print(f'write data OSError: {e}')
+        print('Start Serial USB Initialize ..')
+        print('Wait for a moment ..')
         global_process_data = False
         global_serial.close()
 
-        controller_ports = [p.device for p in serial.tools.list_ports.comports() if 'USB Serial' == p.description]
-        if not controller_ports:
-            raise IOError("no controller found")
+        retrytimes = 0
+        while retrytimes <= 5:
+            retrytimes += 1 
+            controller_ports = [p.device for p in serial.tools.list_ports.comports() if 'USB Serial' == p.description]
+            if controller_ports:
+                break
+            else:
+                print(f"retry times: {retrytimes}")
 
         global_serial = serial.Serial(controller_ports[0],2000000)
         time.sleep(0.2)
         global_process_data = True
-        print('finish')
+        print('Re-Initialize Serial USB OK')
 
 
 if __name__ == '__main__':
