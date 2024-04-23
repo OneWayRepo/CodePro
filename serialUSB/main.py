@@ -19,7 +19,8 @@ import fcntl
 import sys
 
 global_thread_running_flag = True
-global_process_data = True
+global_received_data_enable = True
+global_send_data_enable = True
 global_serial = None
 global_msg = []
 
@@ -67,8 +68,11 @@ class KeyManager():
 
 # process receive packets
 def read_received_packet():
+    global global_serial
+    global global_received_data_enable
+    global global_send_data_enable
     while global_thread_running_flag:
-        if global_process_data:
+        if global_received_data_enable:
             try:
                 msglength = global_serial.in_waiting
                 if msglength < 8:
@@ -81,33 +85,53 @@ def read_received_packet():
                         
                     print(global_msg) 
             except OSError:
-                pass
+                print('Start Serial USB Initialize ..')
+                print('Wait for a moment ..')
+                global_send_data_enable = False
+                global_serial.close()
+
+                retrytimes = 0
+                while retrytimes <= 10:
+                    retrytimes += 1 
+                    controller_ports = [p.device for p in serial.tools.list_ports.comports() if 'USB Serial' == p.description]
+                    if controller_ports:
+                        break
+                    else:
+                        print(f"retry times: {retrytimes}")
+                    time.sleep(2)
+
+                global_serial = serial.Serial(controller_ports[0],2000000)
+                time.sleep(0.2)
+                global_send_data_enable = True
+                print('Re-Initialize Serial USB OK')
 
 
 def send_to_serial(cmd):
     global global_serial
-    global global_process_data
-    try:
-        global_serial.write(cmd)
-    except OSError as e:
-        print('Start Serial USB Initialize ..')
-        print('Wait for a moment ..')
-        global_process_data = False
-        global_serial.close()
+    global global_received_data_enable
+    global global_send_data_enable
+    if global_send_data_enable == True:
+        try:
+            global_serial.write(cmd)
+        except OSError as e:
+            print('Start Serial USB Initialize ..')
+            print('Wait for a moment ..')
+            global_received_data_enable = False
+            global_serial.close()
 
-        retrytimes = 0
-        while retrytimes <= 5:
-            retrytimes += 1 
-            controller_ports = [p.device for p in serial.tools.list_ports.comports() if 'USB Serial' == p.description]
-            if controller_ports:
-                break
-            else:
-                print(f"retry times: {retrytimes}")
+            retrytimes = 0
+            while retrytimes <= 10:
+                retrytimes += 1 
+                controller_ports = [p.device for p in serial.tools.list_ports.comports() if 'USB Serial' == p.description]
+                if controller_ports:
+                    break
+                else:
+                    print(f"retry times: {retrytimes}")
 
-        global_serial = serial.Serial(controller_ports[0],2000000)
-        time.sleep(0.2)
-        global_process_data = True
-        print('Re-Initialize Serial USB OK')
+            global_serial = serial.Serial(controller_ports[0],2000000)
+            time.sleep(0.2)
+            global_received_data_enable = True
+            print('Re-Initialize Serial USB OK')
 
 
 if __name__ == '__main__':
