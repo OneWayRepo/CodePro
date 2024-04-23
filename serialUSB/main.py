@@ -19,6 +19,7 @@ import fcntl
 import sys
 
 global_thread_running_flag = True
+global_process_data = True
 global_serial = None
 global_msg = []
 
@@ -67,34 +68,43 @@ class KeyManager():
 # process receive packets
 def read_received_packet():
     while global_thread_running_flag:
-        try:
-            msglength = global_serial.in_waiting
-            if msglength < 8:
-                continue
-            else:
-                global_msg = []
-                for i in range(msglength):
-                    tmp = ord(global_serial.read())
-                    global_msg.append(tmp)
-                    
-                print(global_msg) 
-        except OSError:
-            pass
+        if global_process_data:
+            try:
+                msglength = global_serial.in_waiting
+                if msglength < 8:
+                    continue
+                else:
+                    global_msg = []
+                    for i in range(msglength):
+                        tmp = ord(global_serial.read())
+                        global_msg.append(tmp)
+                        
+                    print(global_msg) 
+            except OSError:
+                pass
 
 
 def send_to_serial(cmd):
+    global global_serial
+    global global_process_data
     try:
         global_serial.write(cmd)
-    except OSError:
-        print('write data OSError')
+    except OSError as e:
+        print(f'write data OSError: {e}')
+        global_process_data = False
+        global_serial.close()
+
+        controller_ports = [p.device for p in serial.tools.list_ports.comports() if 'USB Serial' == p.description]
+        if not controller_ports:
+            raise IOError("no controller found")
+
+        global_serial = serial.Serial(controller_ports[0],2000000)
+        time.sleep(0.2)
+        global_process_data = True
+        print('finish')
+
 
 if __name__ == '__main__':
-    '''
-    for p in serial.tools.list_ports.comports():
-        print(p.__dict__)
-        print('\n')
-    '''
-
     controller_ports = [p.device for p in serial.tools.list_ports.comports() if 'USB Serial' == p.description]
 
     #print(controller_ports)

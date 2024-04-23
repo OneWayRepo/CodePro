@@ -63,7 +63,7 @@ Run:
 }
 
 void loop() {
-	while (SerialUSB) { 
+	while (SerialUSB) {
 		if (SerialUSB.available()) {
 			buffer_rx[buffer_rx_ptr ++] = SerialUSB.read();
 			if (buffer_rx_ptr == CMD_LENGTH) {
@@ -73,4 +73,18 @@ void loop() {
 			}
 		}
 	}
+
+	/*
+	// initialize serial of PC's communication for starting application
+	Serial.begin(38400);
+	delay(500);
+
+	while(1) {
+		if (Serial.available()) {
+			sprintf(gtmpbuf, "%s: %s", gtitle, gversion);
+			Serial.println(gtmpbuf);
+   			delayMicroseconds(2000000);
+		}
+	}
+	*/
 }
