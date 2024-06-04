@@ -1,8 +1,8 @@
 /*!
-    \file    laser.ino 
-    \brief   modif for test laser
+  \file    laser.ino 
+  \brief   modif for test laser
 
-    \version 2024-01-29, V1.0
+  \version 2024-01-29, V1.0
 	\author	 kevin.wang
 	\note    none
 */
@@ -73,15 +73,15 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   digitalWrite(OUTPUT1,HIGH);
-   delayMicroseconds(2000000);
-   digitalWrite(OUTPUT1,LOW);
+  delayMicroseconds(2000000);
+  digitalWrite(OUTPUT1,LOW);
    
   digitalWrite(OUTPUT2,HIGH);
-   delayMicroseconds(2000000);
+  delayMicroseconds(2000000);
   digitalWrite(OUTPUT2,LOW);
 
-    digitalWrite(OUTPUT3,HIGH);
-   delayMicroseconds(2000000);
+  digitalWrite(OUTPUT3,HIGH);
+  delayMicroseconds(2000000);
   digitalWrite(OUTPUT3,LOW);
 
 }
