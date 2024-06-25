@@ -30,7 +30,7 @@ static const int LASER_735nm = 15;
 static const int LASER_Enable_pin   = 33;
 
 // TCM1040, TCM1041 module
-PacketSerial TCM_104x_PacketSerial
+PacketSerial TCM_104x_PacketSerial;
 
 void setup() {
   // put your setup code here, to run once:

@@ -1,8 +1,8 @@
 /*!
-  \file    laser.ino 
-  \brief   modif for test laser
+    \file    laser.ino 
+    \brief   modif for test laser
 
-  \version 2024-01-29, V1.0
+    \version 2024-01-29, V1.0
 	\author	 kevin.wang
 	\note    none
 */
@@ -30,11 +30,8 @@ static const int OUTPUT1 = 36;
 static const int OUTPUT2 = 37;
 static const int OUTPUT3 = 38;
 
-// Laser enable pin
-static const int LASER_Enable_pin   = 33;
-
 // despeckler enable pin
-static const int DESPECKLER_Enable_pin   = 6;
+static const int DESPECKLER_Enable_pin   = 33;
 
 void setup() {
   // put your setup code here, to run once:
@@ -59,10 +56,6 @@ void setup() {
   pinMode(LASER_735nm, OUTPUT);
   digitalWrite(LASER_735nm, LOW);
 
-  // Laser enable pin
-  pinMode(LASER_Enable_pin, OUTPUT);
-  digitalWrite(LASER_Enable_pin ,HIGH);
-
   // Despeckler enable pin
   pinMode(DESPECKLER_Enable_pin, OUTPUT);
   digitalWrite(DESPECKLER_Enable_pin ,HIGH);
@@ -80,15 +73,15 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   digitalWrite(OUTPUT1,HIGH);
-  delayMicroseconds(2000000);
-  digitalWrite(OUTPUT1,LOW);
+   delayMicroseconds(2000000);
+   digitalWrite(OUTPUT1,LOW);
    
   digitalWrite(OUTPUT2,HIGH);
-  delayMicroseconds(2000000);
+   delayMicroseconds(2000000);
   digitalWrite(OUTPUT2,LOW);
 
-  digitalWrite(OUTPUT3,HIGH);
-  delayMicroseconds(2000000);
+    digitalWrite(OUTPUT3,HIGH);
+   delayMicroseconds(2000000);
   digitalWrite(OUTPUT3,LOW);
 
 }
