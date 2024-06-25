@@ -33,6 +33,9 @@ static const int OUTPUT3 = 38;
 // Laser enable pin
 static const int LASER_Enable_pin   = 33;
 
+// despeckler enable pin
+static const int DESPECKLER_Enable_pin   = 6;
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(38400);
@@ -59,6 +62,10 @@ void setup() {
   // Laser enable pin
   pinMode(LASER_Enable_pin, OUTPUT);
   digitalWrite(LASER_Enable_pin ,HIGH);
+
+  // Despeckler enable pin
+  pinMode(DESPECKLER_Enable_pin, OUTPUT);
+  digitalWrite(DESPECKLER_Enable_pin ,HIGH);
 
   pinMode(OUTPUT1, OUTPUT);
   digitalWrite(OUTPUT1, LOW);
