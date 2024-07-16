@@ -26,9 +26,6 @@ static const int LASER_470nm = 17;
 static const int LASER_638nm = 16;
 static const int LASER_735nm = 15;
 
-// Laser enable pin
-static const int LASER_Enable_pin   = 33;
-
 // TCM1040, TCM1041 module
 PacketSerial TCM_104x_PacketSerial;
 
@@ -58,10 +55,6 @@ void setup() {
 
   pinMode(LASER_735nm, OUTPUT);
   digitalWrite(LASER_735nm, HIGH);
-
-  // Laser enable pin
-  pinMode(LASER_Enable_pin, OUTPUT);
-  digitalWrite(LASER_Enable_pin ,HIGH);
 }
 
 void loop() {
