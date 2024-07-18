@@ -237,6 +237,35 @@ void sendNAK() {
 	uploadData(nakPacket, 5);
 }
 
+void sendStatus() {
+  uint8_t statusPacket[1 + NUM_LASER_CHANNELS + NUM_TEMP_CHANNELS * 5];
+  statusPacket[0] = 'S'; // Status packet identifier
+
+  for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
+    statusPacket[i + 1] = digitalRead(laserPins[i]);
+  }
+
+  for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
+    int offset = 1 + NUM_LASER_CHANNELS + i * 5;
+    statusPacket[offset] = channelStates[i];
+    
+    // Convert temperature to 2-byte representation
+    int16_t temp = (int16_t)(readTemperature(i) * 100); // Temperature in centidegrees
+    statusPacket[offset + 1] = temp >> 8;
+    statusPacket[offset + 2] = temp & 0xFF;
+    
+    statusPacket[offset + 3] = readTECVoltage(i);
+    statusPacket[offset + 4] = readTECCurrent(i);
+  }
+
+  uint32_t packetCRC = crc.calculate(statusPacket, sizeof(statusPacket));
+  uint8_t finalPacket[sizeof(statusPacket) + 4];
+  memcpy(finalPacket, statusPacket, sizeof(statusPacket));
+  memcpy(finalPacket + sizeof(statusPacket), &packetCRC, 4);
+
+	uploadData(finalPacket, sizeof(finalPacket));
+}
+
 void onPacketReceived(const uint8_t* buffer, size_t size) {
   if (size < 5) return; // Minimum packet size (1 byte command + 4 bytes CRC)
 
