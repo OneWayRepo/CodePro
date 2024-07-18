@@ -33,6 +33,8 @@ const unsigned long IDLE_TIMEOUT = 3UL * 60UL * 60UL * 1000UL; // 3 hours in mil
 const float TEMP_ERROR_THRESHOLD = 5.0; // Celsius
 const unsigned long ERROR_DURATION = 5000; // 5 seconds in milliseconds
 
+const unsigned long QUERY_TEMP_TIMEOUT = 100UL; // 100 in milliseconds
+
 enum ChannelState {
   IDLE,
   WARM_UP,
@@ -59,6 +61,10 @@ float tempCurrentPoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0
 ChannelState channelStates[NUM_TEMP_CHANNELS] = {IDLE};
 elapsedMillis timeSinceLastActive;
 elapsedMillis timeInErrorState[NUM_TEMP_CHANNELS] = {0};
+
+elapsedMillis timeSinceLastQueryTemp = 0;
+
+uint8_t gQueryTemperatureChannelIndex = 0;
 
 // TCM modules protocol process variables
 bool reply_frame_analyzing_flag = false;
@@ -116,7 +122,49 @@ float readTemperature(int channel) {
 	address: 1~5
 	module_index: 1~2
  */
-void tcmQueryTemperatureCommand(uint8_t address, uint8_t module_index) {
+uint8_t getChannelIndex(uint8_t address, uint8_t module_index){
+	if (address <= 5)
+		return address - 1;
+	else
+		return address - 1 + (module_index - 1);
+}
+
+/*
+	channel: 0~5
+*/
+void getAddressModuleFromChannel(uint8_t channel, uint8_t* address, uint8_t* module_index) {
+	if (channel<4) {
+		*address = channel + 1;
+		*module_index = 1;
+	}
+	else {
+		if (channel == 4) {
+			*address = channel + 1;
+			*module_index = 1;
+		}
+		else if (channel == 5) {
+			*address = channel + 1;
+			*module_index = 2;
+		}
+		else {
+			*address = 99; 
+			*module_index = 99;
+		}
+	}
+}
+
+/*
+	channel_index: 0~5
+
+	address: 1~5
+	module_index: 1~2
+ */
+void tcmQueryTemperatureCommand(uint8_t channel_index) {
+	uint8_t address = 1; uint8_t module_index = 1;
+	getAddressModuleFromChannel(channel_index, &address, &module_index);
+	if (address == 99 && module_index == 99)
+		return;
+
 	tcm_command_buf_length = 0;
 
 	if (address == 2) {
@@ -205,17 +253,6 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
 }
 
 /*
-	address: 1~5
-	module_index: 1~2
- */
-uint8_t getChannelIndex(uint8_t address, uint8_t module_index){
-	if (address <= 5)
-		return address - 1;
-	else
-		return address - 1 + (module_index - 1);
-}
-
-/*
 	get a char position from a char array 
 
 	return: offset address of the char, if not found return -1 
@@ -264,6 +301,19 @@ bool analyzeValueFromProtocol(float *retvalue) {
 		return false;
 }
 
+/*
+	query loop, call it in the main loop
+*/
+void queryTMCTemperatureMainLoop() {
+	if (timeSinceLastQueryTemp < QUERY_TEMP_TIMEOUT)
+		return;
+	timeSinceLastQueryTemp = 0;
+
+	tcmQueryTemperatureCommand(gQueryTemperatureChannelIndex++);
+	if (gQueryTemperatureChannelIndex == NUM_TEMP_CHANNELS)
+		gQueryTemperatureChannelIndex = 0;
+}
+
 void setup() {
   Serial.begin(115200);
 	char cmd;
@@ -291,11 +341,16 @@ Run:
     pinMode(laserPins[i], OUTPUT);
     digitalWrite(laserPins[i], LOW);
   }
+
+	timeSinceLastQueryTemp = 0;
 }
 
 void loop() {
 	char cmd;
   bool anyActive = false;
+
+	queryTMCTemperatureMainLoop();
+
   for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
     float currentTemp = readTemperature(i);
     float tempDiff = currentTemp - tempSetpoints[i];
@@ -346,11 +401,15 @@ void loop() {
 			case 'A':
 				sendACK();
 				break;
-			case 'T':
-				tcmQueryTemperatureCommand(1, 1);
+			case 'R':
+				for (int i = 0; i < 6; i++) {
+					sprintf(gtmpbuf, "ch%d: %f", i, tempCurrentPoints[i]);
+  				Serial.println(gtmpbuf);
+				}
 				break;
 		}
 	}
+  // code just for debug
 
 	// TCM modules protocol process
 	if (reply_frame_analyzing_flag) {
