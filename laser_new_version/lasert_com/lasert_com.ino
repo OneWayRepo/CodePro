@@ -40,21 +40,52 @@ enum ChannelState {
   ERROR
 };
 
+enum CommandType{
+  TEMPERATURE,
+	CURRENT,
+ 	VOLTAGE, 
+	NONE
+};
+
 CRC32 crc;
 
 // Pins for laser channels (adjust as needed)
 const int laserPins[NUM_LASER_CHANNELS] = {LASER_402nm, LASER_470nm, LASER_550nm, LASER_638nm, LASER_735nm};
 
-// Pins for temperature sensors, TEC voltage, and TEC current (adjust as needed)
-const int tempSensorPins[NUM_TEMP_CHANNELS] = {A0, A1, A2, A3, A4, A5};
-const int tecVoltagePins[NUM_TEMP_CHANNELS] = {A6, A7, A8, A9, A10, A11};
-const int tecCurrentPins[NUM_TEMP_CHANNELS] = {A12, A13, A14, A15, A16, A17};
-
 // Temperature setpoints and channel states
 float tempSetpoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
+float tempCurrentPoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
+
 ChannelState channelStates[NUM_TEMP_CHANNELS] = {IDLE};
 elapsedMillis timeSinceLastActive;
 elapsedMillis timeInErrorState[NUM_TEMP_CHANNELS] = {0};
+
+// TCM modules protocol process variables
+bool reply_frame_analyzing_flag = false;
+
+char tcm_command_buf[256];
+uint8_t tcm_command_buf_length = 0;
+
+char tcm_reply_buf[256];
+uint8_t tcm_reply_buf_length = 0;
+
+// for judge whether the replay value is correct or not
+char tcm_reply_title[256];
+uint8_t tcm_reply_title_length = 0;
+uint8_t tcm_reply_address = 0;
+uint8_t tcm_reply_module = 0;
+CommandType tcm_reply_command_type = NONE;
+
+void setParameters(const uint8_t* buffer, size_t size) {
+  if (size == 1 + NUM_TEMP_CHANNELS * sizeof(float)) {
+    for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
+      memcpy(&tempSetpoints[i], buffer + 1 + i * sizeof(float), sizeof(float));
+    }
+    sendACK();
+  } else {
+    sendNAK();
+  }
+}
 
 void enterIdleState() {
   for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
@@ -69,30 +100,64 @@ void disableLaser(int channel) {
   }
 }
 
+/*
+TC1:TCACTUALTEMP?@1		channel:0
+TC1:TCACTTEMP?@2			channel:1
+TC1:TCACTUALTEMP?@3		channel:2
+TC1:TCACTUALTEMP?@4		channel:3
+TC1:TCACTUALTEMP?@5		channel:4
+TC2:TCACTUALTEMP?@5		channel:5
+ */
 float readTemperature(int channel) {
-  // Convert ADC reading to temperature (adjust based on your sensor)
-  //return (analogRead(tempSensorPins[channel]) * 3.3 / 1024.0 - 0.5) * 100.0;
-	return 26.5;
+	return tempCurrentPoints[channel];
+}
+
+/*
+	address: 1~5
+	module_index: 1~2
+ */
+void tcmQueryTemperatureCommand(uint8_t address, uint8_t module_index) {
+	tcm_command_buf_length = 0;
+
+	if (address == 2) {
+		sprintf(tcm_command_buf, "TC%d:TCACTTEMP?@%d%c", module_index, address, 0x0D);
+	}
+	else {
+		sprintf(tcm_command_buf, "TC%d:TCACTUALTEMP?@%d%c", module_index, address, 0x0D);
+	}
+	Serial5.write(tcm_command_buf, strlen(tcm_command_buf));
+	
+	if (address == 2) {
+		sprintf(tcm_reply_title, "TC%d:TCACTTEMP=", module_index);
+	}
+	else {
+		sprintf(tcm_reply_title, "TC%d:TCACTUALTEMP=", module_index);
+	}
+
+	tcm_reply_title_length = strlen(tcm_reply_title);
+	tcm_reply_address = address;
+	tcm_reply_module = module_index;
+	tcm_reply_command_type = TEMPERATURE;
+		
+	// reset tcm ptotocol analyzing buffer
+	tcm_reply_buf_length = 0;
+	
+	// enable analyzing frame
+	reply_frame_analyzing_flag = true;
 }
 
 float readTECVoltage(int channel) {
-  //return analogRead(tecVoltagePins[channel]) >> 2;
 	return 8.6;
 }
 
 float readTECCurrent(int channel) {
-  //return analogRead(tecCurrentPins[channel]) >> 2;
 	return 10.6;
 }
 
-void send_msg(uint8_t* data, uint8_t length)
-{
-	for (int i = 0; i < length; i++) {
-		Serial.println(data[i]);
-	}
-}
-
-void write_data(uint8_t* data, uint8_t length)
+/*
+	upload data to upstream host, for example PC
+ */
+void uploadData(uint8_t* data, uint8_t length)
 {
 	Serial.write(data, length);
 	uint8_t end[2] = {0x0A, 0x0D};
@@ -105,7 +170,7 @@ void sendACK() {
   uint8_t ackPacket[5];
   ackPacket[0] = ack;
   memcpy(ackPacket + 1, &ackCRC, 4);
-	write_data(ackPacket, 5);
+	uploadData(ackPacket, 5);
 }
 
 void sendNAK() {
@@ -114,7 +179,7 @@ void sendNAK() {
   uint8_t nakPacket[5];
   nakPacket[0] = nak;
   memcpy(nakPacket + 1, &nakCRC, 4);
-	write_data(nakPacket, 5);
+	uploadData(nakPacket, 5);
 }
 
 void onPacketReceived(const uint8_t* buffer, size_t size) {
@@ -131,12 +196,72 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
 
   switch (buffer[0]) {
     case 'Q': // Query status
-      sendStatus();
+      //sendStatus();
       break;
     case 'S': // Set parameters
-      setParameters(buffer, size - 4);
+      //setParameters(buffer, size - 4);
       break;
   }
+}
+
+/*
+	address: 1~5
+	module_index: 1~2
+ */
+uint8_t getChannelIndex(uint8_t address, uint8_t module_index){
+	if (address <= 5)
+		return address - 1;
+	else
+		return address - 1 + (module_index - 1);
+}
+
+/*
+	get a char position from a char array 
+
+	return: offset address of the char, if not found return -1 
+				
+ */
+int getCharOffset(char* arrayValue, char searchChar) {
+	char *p = strchr(arrayValue, searchChar);
+	if (p != NULL) {
+		return p - arrayValue;
+	}
+	else {
+		return -1; 
+	}
+}
+
+/*
+	convert char array to float	
+
+ */
+float convertToFloat(char * arrayValue, int valueLength) {
+	char inArray[valueLength + 1]	= {0};
+	for (int i = 0; i < valueLength; i++) {
+		inArray[i] = arrayValue[i];
+	}
+
+	String value(inArray);
+	return value.toFloat();
+}
+
+/*
+	get information from one frame reply
+
+	return: true, the retvalue is the available value
+				false, the retvalue is the inavailable value
+ */
+bool analyzeValueFromProtocol(float *retvalue) {
+	if (strncmp(tcm_reply_title, tcm_reply_buf, tcm_reply_title_length) == 0) {
+		int offset = getCharOffset(&tcm_reply_buf[tcm_reply_title_length], '@');
+		if (offset == -1)
+			return false;
+
+		*retvalue = convertToFloat(&tcm_reply_buf[tcm_reply_title_length], offset);
+		return true;
+	}
+	else
+		return false;
 }
 
 void setup() {
@@ -210,7 +335,7 @@ void loop() {
     enterIdleState();
   }
 
-  // put your main code here, to run repeatedly:
+  // code just for debug
 	if (Serial.available()) {
 		cmd = Serial.read();
 
@@ -222,7 +347,26 @@ void loop() {
 				sendACK();
 				break;
 			case 'T':
+				tcmQueryTemperatureCommand(1, 1);
 				break;
+		}
+	}
+
+	// TCM modules protocol process
+	if (reply_frame_analyzing_flag) {
+		if (Serial5.available()) {
+			tcm_reply_buf[tcm_reply_buf_length++] = Serial5.read();
+			// read the end flag of frame
+			if (tcm_reply_buf[tcm_reply_buf_length - 1] == 0x0D) {
+				if (tcm_reply_command_type == TEMPERATURE) {
+					float tvalue = 0;
+					if (analyzeValueFromProtocol(&tvalue))
+						tempCurrentPoints[getChannelIndex(tcm_reply_address, tcm_reply_module)] = tvalue;
+
+					// finish frame analyzing, reset flag
+					reply_frame_analyzing_flag = false;
+				}
+			}
 		}
 	}
 }
