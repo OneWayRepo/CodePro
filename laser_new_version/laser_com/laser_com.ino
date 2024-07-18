@@ -83,6 +83,10 @@ uint8_t tcm_reply_address = 0;
 uint8_t tcm_reply_module = 0;
 CommandType tcm_reply_command_type = NONE;
 
+// host protocol process variables
+uint8_t host_protocol_buf[256];
+uint8_t host_protocol_buf_length = 0;
+
 void setParameters(const uint8_t* buffer, size_t size) {
   if (size == 1 + NUM_TEMP_CHANNELS * sizeof(float)) {
     for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
@@ -215,6 +219,7 @@ float readTECCurrent(int channel) {
 void uploadData(uint8_t* data, uint8_t length)
 {
 	Serial.write(data, length);
+	// flag indicate one frame is over
 	uint8_t end[2] = {0x0A, 0x0D};
 	Serial.write(end, 2);
 }
@@ -280,10 +285,10 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
 
   switch (buffer[0]) {
     case 'Q': // Query status
-      //sendStatus();
+      sendStatus();
       break;
     case 'S': // Set parameters
-      //setParameters(buffer, size - 4);
+      setParameters(buffer, size - 4);
       break;
   }
 }
@@ -308,7 +313,7 @@ int getCharOffset(char* arrayValue, char searchChar) {
 	convert char array to float	
 
  */
-float convertToFloat(char * arrayValue, int valueLength) {
+float convertChararrayToFloat(char * arrayValue, int valueLength) {
 	char inArray[valueLength + 1]	= {0};
 	for (int i = 0; i < valueLength; i++) {
 		inArray[i] = arrayValue[i];
@@ -330,7 +335,7 @@ bool analyzeValueFromProtocol(float *retvalue) {
 		if (offset == -1)
 			return false;
 
-		*retvalue = convertToFloat(&tcm_reply_buf[tcm_reply_title_length], offset);
+		*retvalue = convertChararrayToFloat(&tcm_reply_buf[tcm_reply_title_length], offset);
 		return true;
 	}
 	else
@@ -340,18 +345,62 @@ bool analyzeValueFromProtocol(float *retvalue) {
 /*
 	query loop, call it in the main loop
 */
-void queryTMCTemperatureMainLoop() {
+void queryTCMTemperatureMainLoop() {
+	// each 500ms to query one channel data from TMC module
 	if (timeSinceLastQueryTemp < QUERY_TEMP_TIMEOUT)
 		return;
 	timeSinceLastQueryTemp = 0;
 
+	// send the query frame to one of TCM modules
 	tcmQueryTemperatureCommand(gQueryTemperatureChannelIndex++);
 	if (gQueryTemperatureChannelIndex == NUM_TEMP_CHANNELS)
 		gQueryTemperatureChannelIndex = 0;
 }
 
+/*
+	analyzing host(such as PC) frame
+ */
+void analyzingHostFrame() {
+	if (Serial.available()) {
+			host_protocol_buf[host_protocol_buf_length++] = Serial.read();
+			if (host_protocol_buf[host_protocol_buf_length - 1] == 0x0D &&
+				 	host_protocol_buf[host_protocol_buf_length - 2] == 0x0A) {
+				onPacketReceived(host_protocol_buf, host_protocol_buf_length - 2);
+				
+				host_protocol_buf_length = 0;
+			}
+	}
+}
+
+/*
+	analyzing TCM modules fram
+ */
+void analyzingTCMFrame() {
+	if (reply_frame_analyzing_flag) {
+		if (Serial5.available()) {
+			tcm_reply_buf[tcm_reply_buf_length++] = Serial5.read();
+			// read the end flag of frame
+			if (tcm_reply_buf[tcm_reply_buf_length - 1] == 0x0D) {
+				if (tcm_reply_command_type == TEMPERATURE) {
+					float tvalue = 0;
+					if (analyzeValueFromProtocol(&tvalue)) {
+						uint8_t tindex = getChannelIndex(tcm_reply_address, tcm_reply_module);
+						if (tindex != ERR_OUT_OF_RANGE)
+							tempCurrentPoints[tindex] = tvalue;
+					}
+					// finish frame analyzing, reset flag
+					reply_frame_analyzing_flag = false;
+				}
+			}
+		}
+	}
+}
+
 void setup() {
   Serial.begin(115200);
+	delayMicroseconds(100000);	
+
+	/*
 	char cmd;
 	while(1) {
 		if (Serial.available()) {
@@ -364,13 +413,17 @@ void setup() {
 			}
 		}
 	}
+	*/
 
-Run:
+//Run:
+	/*
   sprintf(gtmpbuf, "%s %s", gtitle, gversion);
   Serial.println(gtmpbuf);
+	*/
 
   // TCM104x module UART5
   Serial5.begin(57600);
+	delayMicroseconds(100000);	
 
   // enable pins
   for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
@@ -382,10 +435,10 @@ Run:
 }
 
 void loop() {
-	char cmd;
   bool anyActive = false;
 
-	queryTMCTemperatureMainLoop();
+	// query TCM module data
+	queryTCMTemperatureMainLoop();
 
   for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
     float currentTemp = readTemperature(i);
@@ -426,6 +479,7 @@ void loop() {
     enterIdleState();
   }
 
+	/*
   // code just for debug
 	if (Serial.available()) {
 		cmd = Serial.read();
@@ -451,24 +505,11 @@ void loop() {
 		}
 	}
   // code just for debug
+	*/
+
+	// analyzing host frame
+	analyzingHostFrame();
 
 	// TCM modules protocol process
-	if (reply_frame_analyzing_flag) {
-		if (Serial5.available()) {
-			tcm_reply_buf[tcm_reply_buf_length++] = Serial5.read();
-			// read the end flag of frame
-			if (tcm_reply_buf[tcm_reply_buf_length - 1] == 0x0D) {
-				if (tcm_reply_command_type == TEMPERATURE) {
-					float tvalue = 0;
-					if (analyzeValueFromProtocol(&tvalue)) {
-						uint8_t tindex = getChannelIndex(tcm_reply_address, tcm_reply_module);
-						if (tindex != ERR_OUT_OF_RANGE)
-							tempCurrentPoints[tindex] = tvalue;
-					}
-					// finish frame analyzing, reset flag
-					reply_frame_analyzing_flag = false;
-				}
-			}
-		}
-	}
+	analyzingTCMFrame();
 }

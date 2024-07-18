@@ -36,6 +36,7 @@ class TeensyController:
             packet = b'Q'
             crc = crc32(packet)
             self.packet_serial.write(packet + struct.pack('<I', crc))
+            self.packet_serial.write(b'\x0A\x0D')
 
     def set_temperature_setpoints(self, setpoints):
         with self.lock:
@@ -46,6 +47,7 @@ class TeensyController:
             crc = crc32(packet)
             try:
                 self.packet_serial.write(packet + struct.pack('<I', crc))
+                self.packet_serial.write(b'\x0A\x0D')
             except Exception as e:
                 print(e)
 
@@ -117,9 +119,7 @@ class TeensyController:
         try:
             self.start()
             while True:
-                cmd = bytearray(1)
-                cmd[0] = 84
-                self.packet_serial.write(cmd)
+                self.query_status()
                 time.sleep(1)
         except KeyboardInterrupt:
             print("Stopping...")
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     # Example usage in a separate thread
     def set_parameters_thread():
         time.sleep(2)  # Wait for 5 seconds before setting parameters
-        new_setpoints = [26.0, 27.0, 28.0, 29.0, 30.0, 31.0]
+        new_setpoints = [26.0, 27.1, 28.2, 29.3, 30.4, 31.5]
         controller.set_temperature_setpoints(new_setpoints)
 
     parameter_thread = threading.Thread(target=set_parameters_thread)
