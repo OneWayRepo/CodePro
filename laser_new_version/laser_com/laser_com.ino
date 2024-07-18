@@ -15,7 +15,7 @@
 #include <CRC32.h>
 
 const char gtitle[] = "Lazer_Firmware";
-const char gversion[] = "V1.00";
+const char gversion[] = "V1.10";
 char gtmpbuf[100];
 
 // Teensy4.1 board v2 def
@@ -33,7 +33,8 @@ const unsigned long IDLE_TIMEOUT = 3UL * 60UL * 60UL * 1000UL; // 3 hours in mil
 const float TEMP_ERROR_THRESHOLD = 5.0; // Celsius
 const unsigned long ERROR_DURATION = 5000; // 5 seconds in milliseconds
 
-const unsigned long QUERY_TEMP_TIMEOUT = 100UL; // 100 in milliseconds
+const unsigned long QUERY_TEMP_TIMEOUT = 500UL; // 500 in milliseconds
+const int8_t ERR_OUT_OF_RANGE = 100;
 
 enum ChannelState {
   IDLE,
@@ -121,12 +122,18 @@ float readTemperature(int channel) {
 /*
 	address: 1~5
 	module_index: 1~2
+	return: 0~5
  */
-uint8_t getChannelIndex(uint8_t address, uint8_t module_index){
-	if (address <= 5)
+uint8_t getChannelIndex(uint8_t address, uint8_t module_index) {
+	if (address < 5)
 		return address - 1;
-	else
-		return address - 1 + (module_index - 1);
+	else if(address == 5) {
+    if (module_index == 1)
+      return 4;
+    else if (module_index == 2)
+      return 5;
+	}
+  return ERR_OUT_OF_RANGE;
 }
 
 /*
@@ -139,16 +146,16 @@ void getAddressModuleFromChannel(uint8_t channel, uint8_t* address, uint8_t* mod
 	}
 	else {
 		if (channel == 4) {
-			*address = channel + 1;
+			*address = 5;
 			*module_index = 1;
 		}
 		else if (channel == 5) {
-			*address = channel + 1;
+			*address = 5;
 			*module_index = 2;
 		}
 		else {
-			*address = 99; 
-			*module_index = 99;
+			*address = ERR_OUT_OF_RANGE; 
+			*module_index = ERR_OUT_OF_RANGE;
 		}
 	}
 }
@@ -162,7 +169,7 @@ void getAddressModuleFromChannel(uint8_t channel, uint8_t* address, uint8_t* mod
 void tcmQueryTemperatureCommand(uint8_t channel_index) {
 	uint8_t address = 1; uint8_t module_index = 1;
 	getAddressModuleFromChannel(channel_index, &address, &module_index);
-	if (address == 99 && module_index == 99)
+	if (address == ERR_OUT_OF_RANGE && module_index == ERR_OUT_OF_RANGE)
 		return;
 
 	tcm_command_buf_length = 0;
@@ -401,6 +408,11 @@ void loop() {
 			case 'A':
 				sendACK();
 				break;
+			case 'T':
+				for (int i = 0; i < 6; i++) {
+					tempCurrentPoints[i] = 27;
+				}
+				break;
 			case 'R':
 				for (int i = 0; i < 6; i++) {
 					sprintf(gtmpbuf, "ch%d: %f", i, tempCurrentPoints[i]);
@@ -419,9 +431,11 @@ void loop() {
 			if (tcm_reply_buf[tcm_reply_buf_length - 1] == 0x0D) {
 				if (tcm_reply_command_type == TEMPERATURE) {
 					float tvalue = 0;
-					if (analyzeValueFromProtocol(&tvalue))
-						tempCurrentPoints[getChannelIndex(tcm_reply_address, tcm_reply_module)] = tvalue;
-
+					if (analyzeValueFromProtocol(&tvalue)) {
+						uint8_t tindex = getChannelIndex(tcm_reply_address, tcm_reply_module);
+						if (tindex != ERR_OUT_OF_RANGE)
+							tempCurrentPoints[tindex] = tvalue;
+					}
 					// finish frame analyzing, reset flag
 					reply_frame_analyzing_flag = false;
 				}
