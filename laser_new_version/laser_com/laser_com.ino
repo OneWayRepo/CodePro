@@ -70,10 +70,10 @@ float tempSetpoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
 float tempCurrentPoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
 
 // Volatge value of channels
-float voltageCurrentPoints[NUM_VOLTAGE_CHANNELS] = {1, 2, 3, 4, 5, 6};
+float voltageCurrentPoints[NUM_VOLTAGE_CHANNELS] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6};
 
 // current value of channels
-float currentCurrentPoints[NUM_CURRENT_CHANNELS] = {0, 0, 0, 0, 0, 0};
+float currentCurrentPoints[NUM_CURRENT_CHANNELS] = {0, 0, 0, 0, 0.1, 0.2};
 
 ChannelState channelStates[NUM_TEMP_CHANNELS] = {IDLE};
 elapsedMillis timeSinceLastActive;
@@ -349,7 +349,7 @@ void sendNAK() {
 }
 
 void sendStatus() {
-  uint8_t statusPacket[1 + NUM_LASER_CHANNELS + NUM_TEMP_CHANNELS * 5];
+  uint8_t statusPacket[1 + NUM_LASER_CHANNELS + NUM_TEMP_CHANNELS * 7];
   statusPacket[0] = 'S'; // Status packet identifier
 
   for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
@@ -357,7 +357,7 @@ void sendStatus() {
   }
 
   for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
-    int offset = 1 + NUM_LASER_CHANNELS + i * 5;
+    int offset = 1 + NUM_LASER_CHANNELS + i * 7;
     statusPacket[offset] = channelStates[i];
     
     // Convert temperature to 2-byte representation
@@ -365,8 +365,13 @@ void sendStatus() {
     statusPacket[offset + 1] = temp >> 8;
     statusPacket[offset + 2] = temp & 0xFF;
     
-    statusPacket[offset + 3] = readTECVoltage(i);
-    statusPacket[offset + 4] = readTECCurrent(i);
+		temp = (int16_t)(readTECVoltage(i) * 100);
+    statusPacket[offset + 3] = temp >> 8;
+    statusPacket[offset + 4] = temp & 0xFF;
+
+		temp = (int16_t)(readTECCurrent(i) * 100);
+    statusPacket[offset + 5] = temp >> 8;
+    statusPacket[offset + 6] = temp & 0xFF;
   }
 
   uint32_t packetCRC = crc.calculate(statusPacket, sizeof(statusPacket));

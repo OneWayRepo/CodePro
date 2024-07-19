@@ -69,13 +69,13 @@ class TeensyController:
             print("Laser Status:", [bool(x) for x in laser_status])
             
             for i in range(6):
-                state = temp_data[i*5]
-                temp = struct.unpack('>h', temp_data[i*5 + 1:i*5 + 3])[0] / 100.0
-                tec_voltage = temp_data[i*5 + 3]
-                tec_current = temp_data[i*5 + 4]
+                state = temp_data[i*7]
+                temp = struct.unpack('>h', temp_data[i*7 + 1:i*7 + 3])[0] / 100.0
+                tec_voltage = struct.unpack('>h', temp_data[i*7 + 3:i*7 + 5])[0] / 100.0
+                tec_current = struct.unpack('>h', temp_data[i*7 + 5:i*7 + 7])[0] / 100.0
                 
                 state_str = ["IDLE", "WARM_UP", "ACTIVE", "ERROR"][state]
-                print(f"Channel {i}: State: {state_str}, Temp: {temp:.2f}°C, TEC Voltage: {tec_voltage}, TEC Current: {tec_current}")
+                print(f"Channel {i}: State: {state_str}, Temp: {temp:.2f}°C, TEC Voltage: {tec_voltage:.2f}, TEC Current: {tec_current:.2f}")
         
         elif packet[0] == ord('A'):  # Acknowledgment packet
             print("Parameters set successfully")
