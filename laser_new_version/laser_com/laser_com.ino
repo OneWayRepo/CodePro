@@ -15,7 +15,7 @@
 #include <CRC32.h>
 
 const char gtitle[] = "Lazer_Firmware";
-const char gversion[] = "V1.10";
+const char gversion[] = "V1.20";
 char gtmpbuf[100];
 
 // Teensy4.1 board v2 def
@@ -29,11 +29,24 @@ static const int LASER_735nm = 15;
 
 const int NUM_LASER_CHANNELS = 5;
 const int NUM_TEMP_CHANNELS = 6;
+const int NUM_VOLTAGE_CHANNELS = 6;
 const unsigned long IDLE_TIMEOUT = 3UL * 60UL * 60UL * 1000UL; // 3 hours in milliseconds
 const float TEMP_ERROR_THRESHOLD = 5.0; // Celsius
 const unsigned long ERROR_DURATION = 5000; // 5 seconds in milliseconds
 
-const unsigned long QUERY_TEMP_TIMEOUT = 500UL; // 500 in milliseconds
+const unsigned long EACH_QUERY_DISTANCE = 200UL; // 200 in milliseconds
+
+enum CommandType{
+	NONE = 0,
+  TEMPERATURE,
+ 	VOLTAGE, 
+	CURRENT
+};
+
+const uint8_t MAX_QUERY_TYPE_INDEX = 8
+CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = {TEMPERATURE, VOLTAGE, TEMPERATURE, VOLTAGE, TEMPERATURE, VOLTAGE, TEMPERATURE, VOLTAGE};
+uint8_t current_query_type_index = 0;
+
 const int8_t ERR_OUT_OF_RANGE = 100;
 
 enum ChannelState {
@@ -41,13 +54,6 @@ enum ChannelState {
   WARM_UP,
   ACTIVE,
   ERROR
-};
-
-enum CommandType{
-  TEMPERATURE,
-	CURRENT,
- 	VOLTAGE, 
-	NONE
 };
 
 CRC32 crc;
@@ -59,13 +65,16 @@ const int laserPins[NUM_LASER_CHANNELS] = {LASER_402nm, LASER_470nm, LASER_550nm
 float tempSetpoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
 float tempCurrentPoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
 
+// Volatge value of channels
+float voltageCurrentPoints[NUM_VOLTAGE_CHANNELS] = {1, 2, 3, 4, 5, 6};
+
 ChannelState channelStates[NUM_TEMP_CHANNELS] = {IDLE};
 elapsedMillis timeSinceLastActive;
 elapsedMillis timeInErrorState[NUM_TEMP_CHANNELS] = {0};
 
 elapsedMillis timeSinceLastQueryTemp = 0;
-
 uint8_t gQueryTemperatureChannelIndex = 0;
+uint8_t gQueryVoltageChannelIndex = 0;
 
 // TCM modules protocol process variables
 bool reply_frame_analyzing_flag = false;
@@ -121,6 +130,18 @@ TC2:TCACTUALTEMP?@5		channel:5
  */
 float readTemperature(int channel) {
 	return tempCurrentPoints[channel];
+}
+
+/*
+TC1:TCACTUALVOLTAGE?@1
+TC1:TCACTVOL?@2
+TC1:TCACTUALVOLTAGE?@3
+TC1:TCACTUALVOLTAGE?@4
+TC1:TCACTUALVOLTAGE?@5
+TC2:TCACTUALVOLTAGE?@5
+*/
+float readTECVoltage(int channel) {
+	return voltageCurrentPoints[channel];
 }
 
 /*
@@ -205,8 +226,45 @@ void tcmQueryTemperatureCommand(uint8_t channel_index) {
 	reply_frame_analyzing_flag = true;
 }
 
-float readTECVoltage(int channel) {
-	return 8.6;
+/*
+	channel_index: 0~5
+
+	address: 1~5
+	module_index: 1~2
+ */
+void tcmQueryVoltageCommand(uint8_t channel_index) {
+	uint8_t address = 1; uint8_t module_index = 1;
+	getAddressModuleFromChannel(channel_index, &address, &module_index);
+	if (address == ERR_OUT_OF_RANGE && module_index == ERR_OUT_OF_RANGE)
+		return;
+
+	tcm_command_buf_length = 0;
+
+	if (address == 2) {
+		sprintf(tcm_command_buf, "TC%d:TCACTVOL?@%d%c", module_index, address, 0x0D);
+	}
+	else {
+		sprintf(tcm_command_buf, "TC%d:TCACTUALVOLTAGE?@%d%c", module_index, address, 0x0D);
+	}
+	Serial5.write(tcm_command_buf, strlen(tcm_command_buf));
+
+	if (address == 2) {
+		sprintf(tcm_reply_title, "TC%d:TCACTVOL=", module_index);
+	}
+	else {
+		sprintf(tcm_reply_title, "TC%d:TCACTUALVOLTAGE=", module_index);
+	}
+
+	tcm_reply_title_length = strlen(tcm_reply_title);
+	tcm_reply_address = address;
+	tcm_reply_module = module_index;
+	tcm_reply_command_type = VOLTAGE;
+		
+	// reset tcm ptotocol analyzing buffer
+	tcm_reply_buf_length = 0;
+	
+	// enable analyzing frame
+	reply_frame_analyzing_flag = true;
 }
 
 float readTECCurrent(int channel) {
@@ -329,7 +387,7 @@ float convertChararrayToFloat(char * arrayValue, int valueLength) {
 	return: true, the retvalue is the available value
 				false, the retvalue is the inavailable value
  */
-bool analyzeValueFromProtocol(float *retvalue) {
+bool analyzeValueFromTCMProtocol(float *retvalue) {
 	if (strncmp(tcm_reply_title, tcm_reply_buf, tcm_reply_title_length) == 0) {
 		int offset = getCharOffset(&tcm_reply_buf[tcm_reply_title_length], '@');
 		if (offset == -1)
@@ -345,16 +403,35 @@ bool analyzeValueFromProtocol(float *retvalue) {
 /*
 	query loop, call it in the main loop
 */
-void queryTCMTemperatureMainLoop() {
-	// each 500ms to query one channel data from TMC module
-	if (timeSinceLastQueryTemp < QUERY_TEMP_TIMEOUT)
+void queryTCMDataMainLoop() {
+	// each 200ms to query one channel data from TMC module
+	if (timeSinceLastQueryTemp < EACH_QUERY_DISTANCE)
 		return;
 	timeSinceLastQueryTemp = 0;
+	
+	switch (query_frequnce[current_query_type_index++]) {
+		case TEMPERATURE:
+			{
+				// send the query frame to one of TCM modules
+				tcmQueryTemperatureCommand(gQueryTemperatureChannelIndex++);
+				if (gQueryTemperatureChannelIndex == NUM_TEMP_CHANNELS)
+					gQueryTemperatureChannelIndex = 0;
+			}
+			break;
+		case VOLTAGE: 
+			{
+				// send the query frame to one of TCM modules
+				tcmQueryVoltageCommand(gQueryVoltageChannelIndex++);
+				if (gQueryVoltageChannelIndex == NUM_VOLTAGE_CHANNELS)
+					gQueryVoltageChannelIndex = 0;
+			}
+			break;
+		default:
+			break;	
+	}
 
-	// send the query frame to one of TCM modules
-	tcmQueryTemperatureCommand(gQueryTemperatureChannelIndex++);
-	if (gQueryTemperatureChannelIndex == NUM_TEMP_CHANNELS)
-		gQueryTemperatureChannelIndex = 0;
+	if (current_query_type_index == MAX_QUERY_TYPE_INDEX)
+		current_query_type_index = 0;
 }
 
 /*
@@ -381,16 +458,34 @@ void analyzingTCMFrame() {
 			tcm_reply_buf[tcm_reply_buf_length++] = Serial5.read();
 			// read the end flag of frame
 			if (tcm_reply_buf[tcm_reply_buf_length - 1] == 0x0D) {
-				if (tcm_reply_command_type == TEMPERATURE) {
-					float tvalue = 0;
-					if (analyzeValueFromProtocol(&tvalue)) {
-						uint8_t tindex = getChannelIndex(tcm_reply_address, tcm_reply_module);
-						if (tindex != ERR_OUT_OF_RANGE)
-							tempCurrentPoints[tindex] = tvalue;
-					}
-					// finish frame analyzing, reset flag
-					reply_frame_analyzing_flag = false;
+
+				switch (tcm_reply_command_type) {
+					case TEMPERATURE:
+						{
+							float tvalue = 0;
+							if (analyzeValueFromTCMProtocol(&tvalue)) {
+								uint8_t tindex = getChannelIndex(tcm_reply_address, tcm_reply_module);
+								if (tindex != ERR_OUT_OF_RANGE)
+									tempCurrentPoints[tindex] = tvalue;
+							}
+						}
+						break;
+					case VOLTAGE:
+						{
+							float tvalue = 0;
+							if (analyzeValueFromTCMProtocol(&tvalue)) {
+								uint8_t tindex = getChannelIndex(tcm_reply_address, tcm_reply_module);
+								if (tindex != ERR_OUT_OF_RANGE)
+									voltageCurrentPoints[tindex] = tvalue;
+							}
+						}
+						break;
+					default:
+						break;
 				}
+
+				// finish frame analyzing, reset flag
+				reply_frame_analyzing_flag = false;
 			}
 		}
 	}
@@ -438,7 +533,7 @@ void loop() {
   bool anyActive = false;
 
 	// query TCM module data
-	queryTCMTemperatureMainLoop();
+	queryTCMDataMainLoop();
 
   for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
     float currentTemp = readTemperature(i);

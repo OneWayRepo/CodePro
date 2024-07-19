@@ -52,6 +52,9 @@ class TeensyController:
                 print(e)
 
     def on_packet_received(self, packet):
+        if len(packet) < 4:
+            return
+
         received_crc = struct.unpack('<I', packet[-4:])[0]
         calculated_crc = crc32(packet[:-4])
 
