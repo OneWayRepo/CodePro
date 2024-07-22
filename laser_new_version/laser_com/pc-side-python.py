@@ -140,7 +140,7 @@ if __name__ == "__main__":
     # Example usage in a separate thread
     def set_parameters_thread():
         time.sleep(2)  # Wait for 5 seconds before setting parameters
-        new_setpoints = [26.0, 27.1, 28.2, 29.3, 30.4, 31.5]
+        new_setpoints = [30.0, 35.0, 30.0, 30.0, 35, 100]
         controller.set_temperature_setpoints(new_setpoints)
 
     parameter_thread = threading.Thread(target=set_parameters_thread)

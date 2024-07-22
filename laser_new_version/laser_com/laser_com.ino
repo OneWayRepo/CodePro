@@ -20,6 +20,11 @@ char gtmpbuf[100];
 
 // Teensy4.1 board v2 def
 
+// RGB LED define
+static const int LED_R = 36;
+static const int LED_G = 37;
+static const int LED_B = 38;
+
 // illumination
 static const int LASER_550nm = 19;
 static const int LASER_402nm = 18;
@@ -67,7 +72,7 @@ const int laserPins[NUM_LASER_CHANNELS] = {LASER_402nm, LASER_470nm, LASER_550nm
 
 // Temperature setpoints and channel states
 float tempSetpoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
-float tempCurrentPoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
+float tempCurrentPoints[NUM_TEMP_CHANNELS] = {0.6, 0.5, 0.4, 0.3, 0.2, 0.1};
 
 // Volatge value of channels
 float voltageCurrentPoints[NUM_VOLTAGE_CHANNELS] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6};
@@ -185,7 +190,7 @@ uint8_t getChannelIndex(uint8_t address, uint8_t module_index) {
 	channel: 0~5
 */
 void getAddressModuleFromChannel(uint8_t channel, uint8_t* address, uint8_t* module_index) {
-	if (channel < 4 && channel > 0) {
+	if (channel < 4 && channel >= 0) {
 		*address = channel + 1;
 		*module_index = 1;
 	}
@@ -353,7 +358,7 @@ void sendStatus() {
   statusPacket[0] = 'S'; // Status packet identifier
 
   for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
-    statusPacket[i + 1] = digitalRead(laserPins[i]);
+    statusPacket[i + 1] = ~(digitalRead(laserPins[i]));
   }
 
   for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
@@ -530,8 +535,9 @@ void analyzingTCMFrame() {
 							float tvalue = 0;
 							if (analyzeValueFromTCMProtocol(&tvalue)) {
 								uint8_t tindex = getChannelIndex(tcm_reply_address, tcm_reply_module);
-								if (tindex != ERR_OUT_OF_RANGE)
+								if (tindex != ERR_OUT_OF_RANGE) {
 									tempCurrentPoints[tindex] = tvalue;
+								}
 							}
 						}
 						break;
@@ -540,8 +546,9 @@ void analyzingTCMFrame() {
 							float tvalue = 0;
 							if (analyzeValueFromTCMProtocol(&tvalue)) {
 								uint8_t tindex = getChannelIndex(tcm_reply_address, tcm_reply_module);
-								if (tindex != ERR_OUT_OF_RANGE)
+								if (tindex != ERR_OUT_OF_RANGE) {
 									voltageCurrentPoints[tindex] = tvalue;
+								}
 							}
 						}
 						break;
@@ -598,6 +605,17 @@ void setup() {
   // TCM104x module UART5
   Serial5.begin(57600);
 	delayMicroseconds(100000);	
+
+  pinMode(LED_R, OUTPUT);
+  digitalWrite(LED_R, LOW);
+
+  pinMode(LED_G, OUTPUT);
+  digitalWrite(LED_G, LOW);
+
+  pinMode(LED_B, OUTPUT);
+  digitalWrite(LED_B, LOW);
+
+  digitalWrite(LED_G, HIGH);
 
   // enable pins
   for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
