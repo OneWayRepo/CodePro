@@ -66,7 +66,7 @@ class TeensyController:
             laser_status = packet[1:6]
             temp_data = packet[6:-4]
             
-            print("Laser Status:", [bool(x) for x in laser_status])
+            print("Laser TTL Status:", [bool(x) for x in laser_status])
             
             for i in range(6):
                 state = temp_data[i*7]
@@ -140,7 +140,8 @@ if __name__ == "__main__":
     # Example usage in a separate thread
     def set_parameters_thread():
         time.sleep(2)  # Wait for 5 seconds before setting parameters
-        new_setpoints = [30.0, 35.0, 30.0, 30.0, 35, 100]
+        # 402nm  470nm 550-1 638 735 550-2
+        new_setpoints = [25.0, 25.0, 25.0, 25.0, 25, 82.6]
         controller.set_temperature_setpoints(new_setpoints)
 
     parameter_thread = threading.Thread(target=set_parameters_thread)

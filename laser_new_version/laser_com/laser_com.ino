@@ -15,7 +15,7 @@
 #include <CRC32.h>
 
 const char gtitle[] = "Lazer_Firmware";
-const char gversion[] = "V1.20";
+const char gversion[] = "V1.21";
 char gtmpbuf[100];
 
 // Teensy4.1 board v2 def
@@ -32,12 +32,19 @@ static const int LASER_470nm = 17;
 static const int LASER_638nm = 16;
 static const int LASER_735nm = 15;
 
+// laser status read port
+static const int STATUS_402nm_TTL = 31;
+static const int STATUS_470nm_TTL = 30;
+static const int STATUS_550nm_TTL = 32;
+static const int STATUS_638nm_TTL = 29;
+static const int STATUS_735nm_TTL = 28;
+
 const int NUM_LASER_CHANNELS = 5;
 const int NUM_TEMP_CHANNELS = 6;
 const int NUM_VOLTAGE_CHANNELS = 6;
 const int NUM_CURRENT_CHANNELS = 6;
 const unsigned long IDLE_TIMEOUT = 3UL * 60UL * 60UL * 1000UL; // 3 hours in milliseconds
-const float TEMP_ERROR_THRESHOLD = 5.0; // Celsius
+const float TEMP_ERROR_THRESHOLD = 2.5; // Celsius
 const unsigned long ERROR_DURATION = 5000; // 5 seconds in milliseconds
 
 const unsigned long EACH_QUERY_DISTANCE = 200UL; // 200 in milliseconds
@@ -69,6 +76,7 @@ enum ChannelState {
 CRC32 crc;
 // Pins for laser channels (adjust as needed)
 const int laserPins[NUM_LASER_CHANNELS] = {LASER_402nm, LASER_470nm, LASER_550nm, LASER_638nm, LASER_735nm};
+const int laserStatuspins[NUM_LASER_CHANNELS] = {STATUS_402nm_TTL, STATUS_470nm_TTL, STATUS_550nm_TTL, STATUS_638nm_TTL, STATUS_735nm_TTL};
 
 // Temperature setpoints and channel states
 float tempSetpoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
@@ -128,8 +136,22 @@ void enterIdleState() {
 }
 
 void disableLaser(int channel) {
+	// 5 channels lasert and 6 temperature channels
+	if (channel >= NUM_LASER_CHANNELS)
+		channel = NUM_LASER_CHANNELS - 1;
+
   if (channel < NUM_LASER_CHANNELS) {
     digitalWrite(laserPins[channel], HIGH);
+  }
+}
+
+void enableLaser(int channel) {
+	// 5 channels lasert and 6 temperature channels
+	if (channel >= NUM_LASER_CHANNELS)
+		channel = NUM_LASER_CHANNELS - 1;
+
+  if (channel < NUM_LASER_CHANNELS) {
+    digitalWrite(laserPins[channel], LOW);
   }
 }
 
@@ -358,7 +380,7 @@ void sendStatus() {
   statusPacket[0] = 'S'; // Status packet identifier
 
   for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
-    statusPacket[i + 1] = ~(digitalRead(laserPins[i]));
+    statusPacket[i + 1] = digitalRead(laserStatuspins[i]);
   }
 
   for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
@@ -622,6 +644,11 @@ void setup() {
     pinMode(laserPins[i], OUTPUT);
     digitalWrite(laserPins[i], LOW);
   }
+	
+	// laser port start pins initialize
+  for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
+    pinMode(laserStatuspins[i], INPUT);
+  }
 
 	timeSinceLastQueryTemp = 0;
 }
@@ -660,6 +687,8 @@ void loop() {
         }
         if (abs(tempDiff) < 0.5) {
           channelStates[i] = ACTIVE;
+					// status from ERROR to ACTIVE, restore to enable lasert
+          enableLaser(i);
         }
         break;
     }
@@ -684,9 +713,6 @@ void loop() {
 				sendACK();
 				break;
 			case 'T':
-				for (int i = 0; i < 6; i++) {
-					tempCurrentPoints[i] = 27;
-				}
 				break;
 			case 'R':
 				for (int i = 0; i < 6; i++) {
