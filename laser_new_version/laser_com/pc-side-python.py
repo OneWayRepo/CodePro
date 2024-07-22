@@ -140,7 +140,7 @@ if __name__ == "__main__":
     # Example usage in a separate thread
     def set_parameters_thread():
         time.sleep(2)  # Wait for 5 seconds before setting parameters
-        # 402nm  470nm 550-1 638 735 550-2
+        # 402nm 470nm  638 735 550-1 550-2
         new_setpoints = [25.0, 25.0, 25.0, 25.0, 25, 82.6]
         controller.set_temperature_setpoints(new_setpoints)
 

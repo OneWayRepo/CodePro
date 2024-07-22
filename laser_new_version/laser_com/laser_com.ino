@@ -58,10 +58,6 @@ enum CommandType{
 
 const uint8_t MAX_QUERY_TYPE_INDEX = 9;
 CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = { TEMPERATURE, VOLTAGE, CURRENT, TEMPERATURE, VOLTAGE, TEMPERATURE, VOLTAGE, TEMPERATURE, CURRENT };
-//CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = { CURRENT, CURRENT, CURRENT, CURRENT, CURRENT, CURRENT, CURRENT, CURRENT,  CURRENT};
-//CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = { TEMPERATURE };
-//CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = { CURRENT };
-//CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = { CURRENT, TEMPERATURE, CURRENT, CURRENT, CURRENT, CURRENT, CURRENT, CURRENT,  CURRENT};
 uint8_t current_query_type_index = 0;
 
 const int8_t ERR_OUT_OF_RANGE = 100;
@@ -75,8 +71,8 @@ enum ChannelState {
 
 CRC32 crc;
 // Pins for laser channels (adjust as needed)
-const int laserPins[NUM_LASER_CHANNELS] = {LASER_402nm, LASER_470nm, LASER_550nm, LASER_638nm, LASER_735nm};
-const int laserStatuspins[NUM_LASER_CHANNELS] = {STATUS_402nm_TTL, STATUS_470nm_TTL, STATUS_550nm_TTL, STATUS_638nm_TTL, STATUS_735nm_TTL};
+const int laserPins[NUM_LASER_CHANNELS] = {LASER_402nm, LASER_470nm, LASER_638nm, LASER_735nm, LASER_550nm};
+const int laserStatuspins[NUM_LASER_CHANNELS] = {STATUS_402nm_TTL, STATUS_470nm_TTL, STATUS_638nm_TTL, STATUS_735nm_TTL, STATUS_550nm_TTL};
 
 // Temperature setpoints and channel states
 float tempSetpoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
