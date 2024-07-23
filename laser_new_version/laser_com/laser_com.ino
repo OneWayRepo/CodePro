@@ -75,7 +75,7 @@ const int laserPins[NUM_LASER_CHANNELS] = {LASER_402nm, LASER_470nm, LASER_638nm
 const int laserStatuspins[NUM_LASER_CHANNELS] = {STATUS_402nm_TTL, STATUS_470nm_TTL, STATUS_638nm_TTL, STATUS_735nm_TTL, STATUS_550nm_TTL};
 
 // Temperature setpoints and channel states
-float tempSetpoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 25.0};
+float tempSetpoints[NUM_TEMP_CHANNELS] = {25.0, 25.0, 25.0, 25.0, 25.0, 88.6};
 float tempCurrentPoints[NUM_TEMP_CHANNELS] = {0.6, 0.5, 0.4, 0.3, 0.2, 0.1};
 
 // Volatge value of channels
