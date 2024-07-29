@@ -116,6 +116,74 @@ CommandType tcm_reply_command_type = NONE;
 uint8_t host_protocol_buf[256];
 uint8_t host_protocol_buf_length = 0;
 
+enum LEDState {
+  RED,
+  BLUE,
+ 	GREEN
+};
+
+LEDState led_state = GREEN;
+void set_status_LED(LEDState status) {
+	switch (status) {
+		case RED:
+			if (led_state == LED_R)
+				return;
+  		digitalWrite(LED_R, HIGH);
+  		digitalWrite(LED_G, LOW);
+  		digitalWrite(LED_B, LOW);
+			led_state = LED_R;
+			break;
+
+		case BLUE:
+			if (led_state == LED_B)
+				return;
+  		digitalWrite(LED_R, LOW);
+  		digitalWrite(LED_G, LOW);
+  		digitalWrite(LED_B, HIGH);
+			led_state = LED_B;
+			break;
+
+		case GREEN:
+			if (led_state == LED_G)
+				return;
+  		digitalWrite(LED_R, LOW);
+  		digitalWrite(LED_G, HIGH);
+  		digitalWrite(LED_B, LOW);
+			led_state = LED_G;
+			break;
+
+		default:
+			break;
+	}
+}
+
+void indicate_device_status() {
+	bool flag = false;
+  for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
+    if (channelStates[i] == ERROR)
+			flag = true;
+	}
+	if (flag == true) {
+		set_status_LED(RED);
+		return;
+	}
+
+	// there is not error channel
+	// reset flag
+	flag = false;
+  for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
+    if (channelStates[i] != ACTIVE)
+			flag = true;
+	}
+	if (flag == true) {
+		set_status_LED(BLUE);
+		return;
+	}
+
+	// all channels are ACTIVE
+	set_status_LED(GREEN);
+}
+
 void setParameters(const uint8_t* buffer, size_t size) {
   if (size == 1 + NUM_TEMP_CHANNELS * sizeof(float)) {
     for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
@@ -644,8 +712,8 @@ void setup() {
     digitalWrite(laserPins[i], LOW);
   }
 
-  pinMode(LASER_Enable_pin, OUTPUT);
-  digitalWrite(LASER_Enable_pin, HIGH);
+  pinMode(Dispecker_pin, OUTPUT);
+  digitalWrite(Dispecker_pin, HIGH);
 	
 	// laser port start pins initialize
   for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
@@ -701,6 +769,12 @@ void loop() {
   } else if (timeSinceLastActive >= IDLE_TIMEOUT) {
     enterIdleState();
   }
+
+  // indicate the device status used LED color
+  // Red: if there is one channel ERROR
+  // Gree: all channels are ACTIVE 
+  // Blue: others 
+  indicate_device_status();
 
 	/*
   // code just for debug

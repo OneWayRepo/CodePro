@@ -141,7 +141,7 @@ if __name__ == "__main__":
     def set_parameters_thread():
         time.sleep(2)  # Wait for 5 seconds before setting parameters
         # 402nm 470nm  638 735 550-1 550-2
-        new_setpoints = [25.0, 25.0, 25.0, 25.0, 25, 82.6]
+        new_setpoints = [25.0, 25.0, 25.0, 25.0, 25, 88.6]
         controller.set_temperature_setpoints(new_setpoints)
 
     parameter_thread = threading.Thread(target=set_parameters_thread)
