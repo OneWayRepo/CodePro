@@ -1,0 +1,9 @@
+[
+	{
+	"operation":			"read",
+	"address":				"1",
+	"module":					"T1",
+	"register":				"TCMAXV",
+	"value":					" "
+	}
+]
