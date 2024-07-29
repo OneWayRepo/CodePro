@@ -76,6 +76,10 @@ class TeensyController:
                 
                 state_str = ["IDLE", "WARM_UP", "ACTIVE", "ERROR"][state]
                 print(f"Channel {i}: State: {state_str}, Temp: {temp:.2f}°C, TEC Voltage: {tec_voltage:.2f}, TEC Current: {tec_current:.2f}")
+
+            for i in range(6):
+                temp = struct.unpack('>h', temp_data[42 + i*2 + 0:42 + i*2 + 2])[0] / 100.0
+                print(f"Channel {i}: DiffTemp: {temp:.2f}°C")
         
         elif packet[0] == ord('A'):  # Acknowledgment packet
             print("Parameters set successfully")
@@ -141,7 +145,7 @@ if __name__ == "__main__":
     def set_parameters_thread():
         time.sleep(2)  # Wait for 5 seconds before setting parameters
         # 402nm 470nm  638 735 550-1 550-2
-        new_setpoints = [25.0, 25.0, 25.0, 25.0, 25, 88.6]
+        new_setpoints = [25.3, 25.1, 25.2, 25.3, 25.4, 88.6]
         controller.set_temperature_setpoints(new_setpoints)
 
     parameter_thread = threading.Thread(target=set_parameters_thread)

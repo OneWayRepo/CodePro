@@ -443,7 +443,7 @@ void sendNAK() {
 }
 
 void sendStatus() {
-  uint8_t statusPacket[1 + NUM_LASER_CHANNELS + NUM_TEMP_CHANNELS * 7];
+  uint8_t statusPacket[1 + NUM_LASER_CHANNELS + NUM_TEMP_CHANNELS * 7 + NUM_TEMP_CHANNELS * 2];
   statusPacket[0] = 'S'; // Status packet identifier
 
   for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
@@ -467,6 +467,14 @@ void sendStatus() {
     statusPacket[offset + 5] = temp >> 8;
     statusPacket[offset + 6] = temp & 0xFF;
   }
+
+  for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
+    int offset = 1 + NUM_LASER_CHANNELS + NUM_TEMP_CHANNELS * 7 + i * 2;
+
+    int16_t temp = (int16_t)((readTemperature(i) - tempSetpoints[i]) * 100); // Temperature setpoints
+    statusPacket[offset + 0] = temp >> 8;
+    statusPacket[offset + 1] = temp & 0xFF;
+	}
 
   uint32_t packetCRC = crc.calculate(statusPacket, sizeof(statusPacket));
   uint8_t finalPacket[sizeof(statusPacket) + 4];
@@ -598,13 +606,13 @@ void queryTCMDataMainLoop() {
  */
 void analyzingHostFrame() {
 	if (Serial.available()) {
-			host_protocol_buf[host_protocol_buf_length++] = Serial.read();
-			if (host_protocol_buf[host_protocol_buf_length - 1] == 0x0D &&
-				 	host_protocol_buf[host_protocol_buf_length - 2] == 0x0A) {
-				onPacketReceived(host_protocol_buf, host_protocol_buf_length - 2);
-				
-				host_protocol_buf_length = 0;
-			}
+		host_protocol_buf[host_protocol_buf_length++] = Serial.read();
+		if (host_protocol_buf[host_protocol_buf_length - 1] == 0x0D &&
+				host_protocol_buf[host_protocol_buf_length - 2] == 0x0A) {
+			onPacketReceived(host_protocol_buf, host_protocol_buf_length - 2);
+
+			host_protocol_buf_length = 0;
+		}
 	}
 }
 
@@ -749,6 +757,9 @@ void loop() {
           channelStates[i] = ERROR;
           timeInErrorState[i] = 0;
         }
+				else if (tempDiff < -0.5) {
+          channelStates[i] = WARM_UP;
+				}
         anyActive = true;
         break;
       case ERROR:
