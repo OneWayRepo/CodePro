@@ -14,7 +14,7 @@
 #include <elapsedMillis.h>
 #include <CRC32.h>
 
-const char gtitle[] = "Lazer_Firmware";
+const char gtitle[] = "Laser_Firmware";
 const char gversion[] = "V1.21";
 char gtmpbuf[100];
 
@@ -25,12 +25,15 @@ static const int LED_R = 36;
 static const int LED_G = 37;
 static const int LED_B = 38;
 
-// illumination
+// laser driver en
 static const int LASER_550nm = 19;
 static const int LASER_402nm = 18;
 static const int LASER_470nm = 17;
 static const int LASER_638nm = 16;
 static const int LASER_735nm = 15;
+
+// despeckler
+static const int Dispecker_pin   = 33;
 
 // laser status read port
 static const int STATUS_402nm_TTL = 31;
@@ -640,6 +643,9 @@ void setup() {
     pinMode(laserPins[i], OUTPUT);
     digitalWrite(laserPins[i], LOW);
   }
+
+  pinMode(LASER_Enable_pin, OUTPUT);
+  digitalWrite(LASER_Enable_pin, HIGH);
 	
 	// laser port start pins initialize
   for (int i = 0; i < NUM_LASER_CHANNELS; i++) {
