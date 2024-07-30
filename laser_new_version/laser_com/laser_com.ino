@@ -126,30 +126,30 @@ LEDState led_state = GREEN;
 void set_status_LED(LEDState status) {
 	switch (status) {
 		case RED:
-			if (led_state == LED_R)
+			if (led_state == RED)
 				return;
   		digitalWrite(LED_R, HIGH);
   		digitalWrite(LED_G, LOW);
   		digitalWrite(LED_B, LOW);
-			led_state = LED_R;
+			led_state = RED;
 			break;
 
 		case BLUE:
-			if (led_state == LED_B)
+			if (led_state == BLUE)
 				return;
   		digitalWrite(LED_R, LOW);
   		digitalWrite(LED_G, LOW);
   		digitalWrite(LED_B, HIGH);
-			led_state = LED_B;
+			led_state = BLUE;
 			break;
 
 		case GREEN:
-			if (led_state == LED_G)
+			if (led_state == GREEN)
 				return;
   		digitalWrite(LED_R, LOW);
   		digitalWrite(LED_G, HIGH);
   		digitalWrite(LED_B, LOW);
-			led_state = LED_G;
+			led_state = GREEN;
 			break;
 
 		default:

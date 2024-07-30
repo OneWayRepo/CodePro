@@ -40,6 +40,17 @@ class TeensyController:
         self.query_thread = None
         self.thread_read_received_packet = None
 
+    def transparent_command(self, command):
+        with self.lock:
+            title_packet = b'C'
+            bytess_command = command.encode('utf-8')
+            len_command = len(bytess_command)
+            format_string = '<H{}s'.format(string_length)
+            packet = title_packet + struct.pack(bytess_command, len_command, format_string)
+            crc = crc32(packet)
+            self.packet_serial.write(packet + struct.pack('<I', crc))
+            self.packet_serial.write(b'\x0A\x0D')
+
     def query_status(self):
         with self.lock:
             packet = b'Q'
@@ -94,6 +105,7 @@ class TeensyController:
 
         elif packet[0] == ord('T'):  # Transparent Command 
             print("Transparent Command")
+            print(packet)
 
     def query_loop(self):
         while self.running:

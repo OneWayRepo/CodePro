@@ -518,6 +518,9 @@ void sendStatus() {
 */
 void transparentCommandToUpstream(char* databuf, uint8_t datalength)
 {
+	if (datalength == 0)
+		return;
+
   uint8_t statusPacket[1 + datalength + 1];
 	statusPacket[0] = 'T';
 	strncpy((char *)(&statusPacket[1]), databuf, datalength);
