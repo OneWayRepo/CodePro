@@ -92,6 +92,9 @@ class TeensyController:
         elif packet[0] == ord('N'):  # NAK packet
             print("Command not acknowledged")
 
+        elif packet[0] == ord('T'):  # Transparent Command 
+            print("Transparent Command")
+
     def query_loop(self):
         while self.running:
             self.query_status()
@@ -131,7 +134,7 @@ class TeensyController:
         try:
             self.start()
             while True:
-                self.query_status()
+                #self.query_status()
                 time.sleep(1)
         except KeyboardInterrupt:
             print("Stopping...")

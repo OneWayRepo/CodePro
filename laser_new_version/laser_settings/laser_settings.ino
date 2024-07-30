@@ -14,8 +14,8 @@
 #include <elapsedMillis.h>
 #include <CRC32.h>
 
-const char gtitle[] = "Laser_Firmware";
-const char gversion[] = "V1.21";
+const char gtitle[] = "Laser_Settings";
+const char gversion[] = "V1.00";
 char gtmpbuf[100];
 
 // Teensy4.1 board v2 def
@@ -50,7 +50,7 @@ const unsigned long IDLE_TIMEOUT = 3UL * 60UL * 60UL * 1000UL; // 3 hours in mil
 const float TEMP_ERROR_THRESHOLD = 2.5; // Celsius
 const unsigned long ERROR_DURATION = 5000; // 5 seconds in milliseconds
 
-const unsigned long EACH_QUERY_DISTANCE = 200UL; // 200 in milliseconds
+const unsigned long EACH_QUERY_DISTANCE = 600UL; // 200 in milliseconds
 
 enum CommandType{
 	NONE = 0,
@@ -61,7 +61,8 @@ enum CommandType{
 };
 
 const uint8_t MAX_QUERY_TYPE_INDEX = 10;
-CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = { TEMPERATURE, VOLTAGE, CURRENT, TEMPERATURE, COMMAND, TEMPERATURE, VOLTAGE, TEMPERATURE, CURRENT, COMMAND };
+//CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = { TEMPERATURE, VOLTAGE, CURRENT, TEMPERATURE, COMMAND, TEMPERATURE, VOLTAGE, TEMPERATURE, CURRENT, COMMAND };
+CommandType query_frequnce[MAX_QUERY_TYPE_INDEX] = { COMMAND }; 
 uint8_t current_query_type_index = 0;
 
 const int8_t ERR_OUT_OF_RANGE = 100;
@@ -117,6 +118,10 @@ CommandType tcm_reply_command_type = NONE;
 uint8_t host_protocol_buf[256];
 uint8_t host_protocol_buf_length = 0;
 
+// record command from upstream host such as PC
+char tcm_transparent_command_buf[256];
+uint8_t tcm_transparent_command_length = 0; 
+
 enum LEDState {
   RED,
   BLUE,
@@ -127,30 +132,30 @@ LEDState led_state = GREEN;
 void set_status_LED(LEDState status) {
 	switch (status) {
 		case RED:
-			if (led_state == LED_R)
+			if (led_state == RED)
 				return;
   		digitalWrite(LED_R, HIGH);
   		digitalWrite(LED_G, LOW);
   		digitalWrite(LED_B, LOW);
-			led_state = LED_R;
+			led_state = RED;
 			break;
 
 		case BLUE:
-			if (led_state == LED_B)
+			if (led_state == BLUE)
 				return;
   		digitalWrite(LED_R, LOW);
   		digitalWrite(LED_G, LOW);
   		digitalWrite(LED_B, HIGH);
-			led_state = LED_B;
+			led_state = BLUE;
 			break;
 
 		case GREEN:
-			if (led_state == LED_G)
+			if (led_state == GREEN)
 				return;
   		digitalWrite(LED_R, LOW);
   		digitalWrite(LED_G, HIGH);
   		digitalWrite(LED_B, LOW);
-			led_state = LED_G;
+			led_state = GREEN;
 			break;
 
 		default:
@@ -415,6 +420,29 @@ void tcmQueryCurrentCommand(uint8_t channel_index) {
 }
 
 /*
+ transparent command from PC to TCM module	
+ */
+void tcmTransparentSend() {
+	if ( tcm_transparent_command_length == 0 )
+		return;
+
+	// transparent send command to TMC
+	sprintf(tcm_command_buf, "%s%c", tcm_transparent_command_buf, 0x0D);
+	Serial5.write(tcm_command_buf, strlen(tcm_command_buf));
+
+	// clear transparent command buffer length
+	tcm_transparent_command_length = 0;
+
+	tcm_reply_command_type = COMMAND;
+
+	// reset tcm ptotocol analyzing buffer
+	tcm_reply_buf_length = 0;
+
+	// enable analyzing frame
+	reply_frame_analyzing_flag = true;
+}
+
+/*
 	upload data to upstream host, for example PC
  */
 void uploadData(uint8_t* data, uint8_t length)
@@ -476,6 +504,24 @@ void sendStatus() {
     statusPacket[offset + 0] = temp >> 8;
     statusPacket[offset + 1] = temp & 0xFF;
 	}
+
+  uint32_t packetCRC = crc.calculate(statusPacket, sizeof(statusPacket));
+  uint8_t finalPacket[sizeof(statusPacket) + 4];
+  memcpy(finalPacket, statusPacket, sizeof(statusPacket));
+  memcpy(finalPacket + sizeof(statusPacket), &packetCRC, 4);
+
+	uploadData(finalPacket, sizeof(finalPacket));
+}
+
+/*
+	send reply from TCM to upstream device such as PC
+*/
+void transparentCommandToUpstream(char* databuf, uint8_t datalength)
+{
+  uint8_t statusPacket[1 + datalength + 1];
+	statusPacket[0] = 'T';
+	strncpy((char *)(&statusPacket[1]), databuf, datalength);
+	statusPacket[1 + datalength] = '\0';
 
   uint32_t packetCRC = crc.calculate(statusPacket, sizeof(statusPacket));
   uint8_t finalPacket[sizeof(statusPacket) + 4];
@@ -596,9 +642,7 @@ void queryTCMDataMainLoop() {
 			break;
 		case COMMAND:
 			{
-
-
-
+				tcmTransparentSend();
 			}
 			break;
 		default:
@@ -666,6 +710,11 @@ void analyzingTCMFrame() {
 										currentCurrentPoints[tindex] = tvalue;
 								}
 							}
+						}
+						break;
+					case COMMAND:
+						{
+							transparentCommandToUpstream(tcm_reply_buf, tcm_reply_buf_length);
 						}
 						break;
 					default:
@@ -737,6 +786,10 @@ void setup() {
   }
 
 	timeSinceLastQueryTemp = 0;
+
+	// debug information
+	sprintf(tcm_transparent_command_buf, "TC2:TCACTUALTEMP?@5");
+	tcm_transparent_command_length = strlen(tcm_transparent_command_buf);
 }
 
 void loop() {
