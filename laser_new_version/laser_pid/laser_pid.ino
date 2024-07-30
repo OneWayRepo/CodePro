@@ -8,13 +8,15 @@
 */
 #include <cstdlib>
 #include <cstdio>
+#include <string>
+
 
 #include <FastLED.h>
 
 #include <elapsedMillis.h>
 #include <CRC32.h>
 
-const char gtitle[] = "Laser_Settings";
+const char gtitle[] = "Laser_PID";
 const char gversion[] = "V1.00";
 char gtmpbuf[100];
 
@@ -50,7 +52,7 @@ const unsigned long IDLE_TIMEOUT = 3UL * 60UL * 60UL * 1000UL; // 3 hours in mil
 const float TEMP_ERROR_THRESHOLD = 2.5; // Celsius
 const unsigned long ERROR_DURATION = 5000; // 5 seconds in milliseconds
 
-const unsigned long EACH_QUERY_DISTANCE = 200UL; // 200 in milliseconds
+const unsigned long EACH_QUERY_DISTANCE = 500UL; // 200 in milliseconds
 
 enum CommandType{
 	NONE = 0,
@@ -89,6 +91,13 @@ float voltageCurrentPoints[NUM_VOLTAGE_CHANNELS] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6
 // current value of channels
 float currentCurrentPoints[NUM_CURRENT_CHANNELS] = {0, 0, 0, 0, 0.1, 0.2};
 
+//
+const int NUM_COMMAND_INSTRUMENTS = 2;
+std::string commandInstruments[NUM_COMMAND_INSTRUMENTS][2] = {
+																													{"TC1:TCPIDCAL=4@1", 0}, 
+																													{"TC1:TCSW=1@1", 0}
+																													};
+
 ChannelState channelStates[NUM_TEMP_CHANNELS] = {IDLE};
 elapsedMillis timeSinceLastActive;
 elapsedMillis timeInErrorState[NUM_TEMP_CHANNELS] = {0};
@@ -97,6 +106,7 @@ elapsedMillis timeSinceLastQueryTemp = 0;
 uint8_t gQueryTemperatureChannelIndex = 0;
 uint8_t gQueryVoltageChannelIndex = 0;
 uint8_t gQueryCurrentChannelIndex = 0;
+uint8_t gQueryCommandIndex = 0;
 
 // TCM modules protocol process variables
 bool reply_frame_analyzing_flag = false;
@@ -121,6 +131,75 @@ uint8_t host_protocol_buf_length = 0;
 // record command from upstream host such as PC
 char tcm_transparent_command_buf[256];
 uint8_t tcm_transparent_command_length = 0; 
+uint8_t tcm_transparent_command_type = 0;
+
+enum LEDState {
+  RED,
+  BLUE,
+ 	GREEN
+};
+
+LEDState led_state = GREEN;
+void set_status_LED(LEDState status) {
+	switch (status) {
+		case RED:
+			if (led_state == RED)
+				return;
+  		digitalWrite(LED_R, HIGH);
+  		digitalWrite(LED_G, LOW);
+  		digitalWrite(LED_B, LOW);
+			led_state = RED;
+			break;
+
+		case BLUE:
+			if (led_state == BLUE)
+				return;
+  		digitalWrite(LED_R, LOW);
+  		digitalWrite(LED_G, LOW);
+  		digitalWrite(LED_B, HIGH);
+			led_state = BLUE;
+			break;
+
+		case GREEN:
+			if (led_state == GREEN)
+				return;
+  		digitalWrite(LED_R, LOW);
+  		digitalWrite(LED_G, HIGH);
+  		digitalWrite(LED_B, LOW);
+			led_state = GREEN;
+			break;
+
+		default:
+			break;
+	}
+}
+
+void indicate_device_status() {
+	bool flag = false;
+  for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
+    if (channelStates[i] == ERROR)
+			flag = true;
+	}
+	if (flag == true) {
+		set_status_LED(RED);
+		return;
+	}
+
+	// there is not error channel
+	// reset flag
+	flag = false;
+  for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
+    if (channelStates[i] != ACTIVE)
+			flag = true;
+	}
+	if (flag == true) {
+		set_status_LED(BLUE);
+		return;
+	}
+
+	// all channels are ACTIVE
+	set_status_LED(GREEN);
+}
 
 void setParameters(const uint8_t* buffer, size_t size) {
   if (size == 1 + NUM_TEMP_CHANNELS * sizeof(float)) {
@@ -131,15 +210,6 @@ void setParameters(const uint8_t* buffer, size_t size) {
   } else {
     sendNAK();
   }
-}
-
-void setCommand(const uint8_t* buffer, size_t size) {
-	// debug information
-	strncpy(tcm_transparent_command_buf, (const char *)(&buffer[1]), size);
-	tcm_transparent_command_buf[size - 1] = '\0';
-	tcm_transparent_command_length = size;
-
-	getCMDACK();
 }
 
 void enterIdleState() {
@@ -364,7 +434,7 @@ void tcmQueryCurrentCommand(uint8_t channel_index) {
  transparent command from PC to TCM module	
  */
 void tcmTransparentSend() {
-	if ( tcm_transparent_command_length == 0 )
+	if (tcm_transparent_command_length == 0)
 		return;
 
 	// transparent send command to TMC
@@ -410,29 +480,6 @@ void sendNAK() {
   nakPacket[0] = nak;
   memcpy(nakPacket + 1, &nakCRC, 4);
 	uploadData(nakPacket, 5);
-}
-
-void getCMDACK() {
-  uint8_t ack = 'C';
-  uint32_t ackCRC = crc.calculate(&ack, 1);
-  uint8_t ackPacket[5];
-  ackPacket[0] = ack;
-  memcpy(ackPacket + 1, &ackCRC, 4);
-	uploadData(ackPacket, 5);
-}
-
-void uploadcmd(char* cmd) {
-	uint8_t len = strlen(cmd);
-  uint8_t statusPacket[len + 1];
-  statusPacket[0] = 'C';
-	strncpy((char *)(&statusPacket[1]), cmd, len);
-
-  uint32_t packetCRC = crc.calculate(statusPacket, sizeof(statusPacket));
-  uint8_t finalPacket[sizeof(statusPacket) + 4];
-  memcpy(finalPacket, statusPacket, sizeof(statusPacket));
-  memcpy(finalPacket + sizeof(statusPacket), &packetCRC, 4);
-
-	uploadData(finalPacket, sizeof(finalPacket));
 }
 
 void sendStatus() {
@@ -516,9 +563,6 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
       break;
     case 'S': // Set parameters
       setParameters(buffer, size - 4);
-      break;
-    case 'C': // Set parameters
-      setCommand(buffer, size - 4);
       break;
   }
 }
@@ -612,6 +656,17 @@ void queryTCMDataMainLoop() {
 			break;
 		case COMMAND:
 			{
+				// load command into buffer
+				sprintf(tcm_transparent_command_buf, commandInstruments[gQueryCommandIndex][0].c_str());
+				tcm_transparent_command_length = strlen(tcm_transparent_command_buf);
+				tcm_transparent_command_type = commandInstruments[gQueryCommandIndex][1];
+
+				/*
+					 if (gQueryCommandIndex == NUM_COMMAND_INSTRUMENTS)
+					 gQueryCommandIndex = 0;
+				*/
+
+				// send TMC command to TMC module
 				tcmTransparentSend();
 			}
 			break;
@@ -759,12 +814,63 @@ void setup() {
 }
 
 void loop() {
+  bool anyActive = false;
+
 	// query TCM module data
 	queryTCMDataMainLoop();
 
+  for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
+    float currentTemp = readTemperature(i);
+    float tempDiff = currentTemp - tempSetpoints[i];
+
+    switch (channelStates[i]) {
+      case IDLE:
+        if (tempDiff < -0.5) {
+          channelStates[i] = WARM_UP;
+        }
+        break;
+      case WARM_UP:
+        if (abs(tempDiff) < 0.5) {
+          channelStates[i] = ACTIVE;
+        }
+        break;
+      case ACTIVE:
+        if (tempDiff > TEMP_ERROR_THRESHOLD) {
+          channelStates[i] = ERROR;
+          timeInErrorState[i] = 0;
+        }
+				else if (tempDiff < -0.5) {
+          channelStates[i] = WARM_UP;
+				}
+        anyActive = true;
+        break;
+      case ERROR:
+        if (timeInErrorState[i] >= ERROR_DURATION) {
+          disableLaser(i);
+        }
+        if (abs(tempDiff) < 0.5) {
+          channelStates[i] = ACTIVE;
+					// status from ERROR to ACTIVE, restore to enable lasert
+          enableLaser(i);
+        }
+        break;
+    }
+  }
+
+  if (anyActive) {
+    timeSinceLastActive = 0;
+  } else if (timeSinceLastActive >= IDLE_TIMEOUT) {
+    enterIdleState();
+  }
+
+  // indicate the device status used LED color
+  // Red: if there is one channel ERROR
+  // Gree: all channels are ACTIVE 
+  // Blue: others 
+  indicate_device_status();
+
 	/*
   // code just for debug
-	char cmd;
 	if (Serial.available()) {
 		cmd = Serial.read();
 
@@ -776,7 +882,6 @@ void loop() {
 				sendACK();
 				break;
 			case 'T':
-				Serial.println(tcm_transparent_command_buf);
 				break;
 			case 'R':
 				for (int i = 0; i < 6; i++) {

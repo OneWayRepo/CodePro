@@ -26,13 +26,31 @@ import json
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
+class InstrumentStatus:
+    def __init__(self):
+        self.instrumentIndex = 0
+        self.MAXinstrument = 0
+        self.percent = 0
+        self.reply = ''
+        self.retry = 0
+        # INIT:  
+        # PROCESS:
+        # OK
+        # FAIL
+        # FINISH
+        # CONTINUE 
+        self.status = 'INIT'
+
+
 class TeensyController:
-    def __init__(self, port, baud_rate=115200):
+    def __init__(self, instrumentstatus, port, baud_rate=115200):
         ports = [p.device for p in list_ports.comports() if port == p.device]
         if not ports:
             raise ValueError(f"No device found with serial number: {serial_number}")
 
         self.packet_serial = serial.Serial(ports[0], baudrate=baud_rate, timeout=1)
+
+        self.instrumentstatus = instrumentstatus
 
         self.lock = threading.RLock()
         self.query_interval = 1.0  # Query interval in seconds
@@ -40,13 +58,50 @@ class TeensyController:
         self.query_thread = None
         self.thread_read_received_packet = None
 
+        # type A: means reply=1 is OK
+        # type V: means reply is value
+        # type S: means reply=8 is value save OK
+        self.instruments = [
+                    ['TC1:TCPIDCAL=4@1', 'A'],
+                    ['TC1:TCSW=1@1', 'A'],
+                    ['TC1:TCTUNESTATUS?@1', 'V'],
+                    ['TC1:TCTD!@1', 'S'],
+                    ['TC1:TCTI!@1', 'S'],
+                    ['TC1:TCP!@1', 'S'],
+                    ['TC1:TCCTRLINTERVAL!@1', 'S'],
+
+                    ['TC1:TCPIDALGO=4@2', 'A'],
+                    ['TC1:TCSW=1@2', 'A'],
+                    ['TC1:TCTUNESTATUS?@2', 'V'],
+                    ['TC1:TCPIDP!@2', 'S'],
+                    ['TC1:TCPIDTI!@2', 'S'],
+                    ['TC1:TCPIDTD!@2', 'S'],
+                    ['TC1:TCCTRLINTERVAL!@2', 'S'],
+
+                    ['TC1:TCPIDCAL=4@3', 'A'],
+                    ['TC1:TCSW=1@3', 'A'],
+                    ['TC1:TCTUNESTATUS?@3', 'V'],
+                    ['TC1:TCTD!@3', 'S'],
+                    ['TC1:TCTI!@3', 'S'],
+                    ['TC1:TCP!@3', 'S'],
+                    ['TC1:TCCTRLINTERVAL!@3', 'S'],
+
+                    ['TC1:TCPIDCAL=4@4', 'A'],
+                    ['TC1:TCSW=1@4', 'A'],
+                    ['TC1:TCTUNESTATUS?@4', 'V'],
+                    ['TC1:TCTD!@4', 'S'],
+                    ['TC1:TCTI!@4', 'S'],
+                    ['TC1:TCP!@4', 'S'],
+                    ['TC1:TCCTRLINTERVAL!@4', 'S']
+                ]
+
+        self.instrumentstatus.MAXinstrument = len(self.instruments)
+
     def transparent_command(self, command):
         with self.lock:
             title_packet = b'C'
-            bytess_command = command.encode('utf-8')
-            len_command = len(bytess_command)
-            format_string = '<H{}s'.format(string_length)
-            packet = title_packet + struct.pack(bytess_command, len_command, format_string)
+            bytes_command = command.encode('utf-8')
+            packet = title_packet + bytes_command
             crc = crc32(packet)
             self.packet_serial.write(packet + struct.pack('<I', crc))
             self.packet_serial.write(b'\x0A\x0D')
@@ -70,6 +125,35 @@ class TeensyController:
                 self.packet_serial.write(b'\x0A\x0D')
             except Exception as e:
                 print(e)
+
+    def analyze_TCM_reply(self, reply):
+        # save reply
+        self.instrumentstatus.reply = reply
+
+        if self.instruments[self.instrumentstatus.instrumentIndex][1] == 'A':
+            if reply[4:11] == 'REPLY=1':
+                self.instrumentstatus.status = 'OK'
+            else:
+                self.instrumentstatus.status = 'FAIL'
+        elif self.instruments[self.instrumentstatus.instrumentIndex][1] == 'V': 
+            pos_1 = reply.find('=', 0)
+            pos_2 = reply.find('@', 0)
+            if pos_1 != -1 and pos_2 != -1:
+                if reply[pos_1 + 1:pos_2] == '100':
+                    self.instrumentstatus.percent = reply[pos_1 + 1:pos_2]
+                    self.instrumentstatus.status = 'OK'
+                else:
+                    self.instrumentstatus.percent = reply[pos_1 + 1:pos_2]
+                    self.instrumentstatus.status = 'CONTINUE'
+            else:
+                self.instrumentstatus.status = 'FAIL'
+        elif self.instruments[self.instrumentstatus.instrumentIndex][1] == 'S': 
+            if reply[4:11] == 'REPLY=8':
+                self.instrumentstatus.status = 'OK'
+            else:
+                self.instrumentstatus.status = 'FAIL'
+        else:
+            self.instrumentstatus.status = 'FAIL'
 
     def on_packet_received(self, packet):
         if len(packet) < 4:
@@ -104,8 +188,13 @@ class TeensyController:
             print("Command not acknowledged")
 
         elif packet[0] == ord('T'):  # Transparent Command 
-            print("Transparent Command")
-            print(packet)
+            reply_cmd = packet[1:-4].decode()
+            self.analyze_TCM_reply(reply_cmd)
+
+        elif packet[0] == ord('C'):  # Acknowledgment packet
+            reply_cmd = packet[1:-4].decode()
+            print(reply_cmd)
+            print("Command Send successfully")
 
     def query_loop(self):
         while self.running:
@@ -145,9 +234,41 @@ class TeensyController:
     def run(self):
         try:
             self.start()
-            while True:
-                #self.query_status()
+            while self.instrumentstatus.status != 'FINISH':
+                self.transparent_command(
+                        self.instruments[self.instrumentstatus.instrumentIndex][0])
+                self.instrumentstatus.status = 'PROCESS'
+                print('NO. ' + str(self.instrumentstatus.instrumentIndex + 1) 
+                      + ' Retry: ' + str(self.instrumentstatus.retry + 1) + ' Instrument: ' + self.instruments[self.instrumentstatus.instrumentIndex][0])
+
+                timeout = 10
+                while self.instrumentstatus.status == 'PROCESS' and timeout != 0: 
+                    time.sleep(0.5)
+                    timeout = timeout - 1
+
+                if self.instrumentstatus.status == 'OK':
+                    self.instrumentstatus.instrumentIndex = self.instrumentstatus.instrumentIndex + 1
+                    self.instrumentstatus.retry = 0
+                    if self.instrumentstatus.instrumentIndex == self.instrumentstatus.MAXinstrument:
+                        self.instrumentstatus.status = 'FINISH'
+                        print('Send Commands Finish')
+                elif self.instrumentstatus.status == 'FAIL':
+                    if self.instrumentstatus.retry != 3: 
+                        self.instrumentstatus.retry += 1
+                    else:
+                        self.instrumentstatus.status = 'FINISH'
+                        print('Send Commands Fail: ' + self.instruments[self.instrumentstatus.instrumentIndex][0])
+                        print('Reply: ' + self.instrumentstatus.reply)
+                elif self.instrumentstatus.status == 'PROCESS':
+                    self.instrumentstatus.status = 'FINISH'
+                    print('Send Commands Timeout ')
+                elif self.instrumentstatus.status == 'CONTINUE':
+                    print('PID tuning: %' + self.instrumentstatus.percent)
+                else:
+                    print('Send Commands Unknown Error')
+
                 time.sleep(1)
+
         except KeyboardInterrupt:
             print("Stopping...")
         finally:
@@ -159,22 +280,7 @@ def crc32_to_bytes(crc32_value):
 
 
 if __name__ == "__main__":
-    controller = TeensyController("/dev/ttyACM0")  # Adjust port as needed
-    
-    # Example usage in a separate thread
-    def set_parameters_thread():
-        time.sleep(1)  # Wait for 2 seconds before setting parameters
-        try:
-            jmrg = JsonMrg('settings.json')
-            if jmrg.load_data_from_file():
-                data = str(jmrg.get_data())
-            else:
-                logging.error("Failed to load data from JSON file.")
-        except Exception as e:
-            logging.error(f"An error occurred: {e}")
-
-
-    parameter_thread = threading.Thread(target=set_parameters_thread)
-    parameter_thread.start()
+    instrumentstatus = InstrumentStatus()
+    controller = TeensyController(instrumentstatus, "/dev/ttyACM0")  # Adjust port as needed
 
     controller.run()
