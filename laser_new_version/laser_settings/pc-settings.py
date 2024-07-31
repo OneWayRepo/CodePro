@@ -30,6 +30,7 @@ class InstrumentStatus:
         self.percent = 0
         self.reply = ''
         self.retry = 0
+        self.MAXretry = 5
         # INIT:  
         # PROCESS:
         # OK
@@ -58,7 +59,29 @@ class TeensyController:
         # type A: means reply=1 is OK
         # type V: means reply is value
         # type S: means reply=8 is value save OK
+        # type R: just display reply from TMC
         self.instruments = [
+                #    uncomment this for query PID arguments 
+                #    ['TC1:TCTD?@1', 'R'],
+                #    ['TC1:TCTI?@1', 'R'],
+                #    ['TC1:TCP?@1', 'R'],
+                #    ['TC1:TCCTRLINTERVAL?@1', 'R'],
+
+                #    ['TC1:TCPIDP?@2', 'R'],
+                #    ['TC1:TCPIDTI?@2', 'R'],
+                #    ['TC1:TCPIDTD?@2', 'R'],
+                #    ['TC1:TCCTRLINTERVAL?@2', 'R'],
+
+                #    ['TC1:TCTD?@3', 'R'],
+                #    ['TC1:TCTI?@3', 'R'],
+                #    ['TC1:TCP?@3', 'R'],
+                #    ['TC1:TCCTRLINTERVAL?@3', 'R'],
+
+                #    ['TC1:TCTD?@4', 'R'],
+                #    ['TC1:TCTI?@4', 'R'],
+                #    ['TC1:TCP?@4', 'R'],
+                #    ['TC1:TCCTRLINTERVAL?@4', 'R'],
+
                     ['TC1:TCPIDCAL=4@1', 'A'],
                     ['TC1:TCSW=1@1', 'A'],
                     ['TC1:TCTUNESTATUS?@1', 'V'],
@@ -90,6 +113,27 @@ class TeensyController:
                     ['TC1:TCTI!@4', 'S'],
                     ['TC1:TCP!@4', 'S'],
                     ['TC1:TCCTRLINTERVAL!@4', 'S']
+
+                #    you could compare PID arugments before 
+                #    ['TC1:TCTD?@1', 'R'],
+                #    ['TC1:TCTI?@1', 'R'],
+                #    ['TC1:TCP?@1', 'R'],
+                #    ['TC1:TCCTRLINTERVAL?@1', 'R'],
+
+                #    ['TC1:TCPIDP?@2', 'R'],
+                #    ['TC1:TCPIDTI?@2', 'R'],
+                #    ['TC1:TCPIDTD?@2', 'R'],
+                #    ['TC1:TCCTRLINTERVAL?@2', 'R'],
+
+                #    ['TC1:TCTD?@3', 'R'],
+                #    ['TC1:TCTI?@3', 'R'],
+                #    ['TC1:TCP?@3', 'R'],
+                #    ['TC1:TCCTRLINTERVAL?@3', 'R'],
+
+                #    ['TC1:TCTD?@4', 'R'],
+                #    ['TC1:TCTI?@4', 'R'],
+                #    ['TC1:TCP?@4', 'R'],
+                #    ['TC1:TCCTRLINTERVAL?@4', 'R'],
                 ]
 
         self.instrumentstatus.MAXinstrument = len(self.instruments)
@@ -149,6 +193,9 @@ class TeensyController:
                 self.instrumentstatus.status = 'OK'
             else:
                 self.instrumentstatus.status = 'FAIL'
+        elif self.instruments[self.instrumentstatus.instrumentIndex][1] == 'R': 
+            print(reply)
+            self.instrumentstatus.status = 'OK'
         else:
             self.instrumentstatus.status = 'FAIL'
 
@@ -190,8 +237,7 @@ class TeensyController:
 
         elif packet[0] == ord('C'):  # Acknowledgment packet
             reply_cmd = packet[1:-4].decode()
-            print(reply_cmd)
-            print("Command Send successfully")
+            #print("Receive Acknowledged")
 
     def query_loop(self):
         while self.running:
@@ -248,21 +294,21 @@ class TeensyController:
                     self.instrumentstatus.retry = 0
                     if self.instrumentstatus.instrumentIndex == self.instrumentstatus.MAXinstrument:
                         self.instrumentstatus.status = 'FINISH'
-                        print('Send Commands Finish')
+                        print('Tuning PID Arguments Successfully')
                 elif self.instrumentstatus.status == 'FAIL':
-                    if self.instrumentstatus.retry != 3: 
+                    if self.instrumentstatus.retry < self.MAXretry: 
                         self.instrumentstatus.retry += 1
                     else:
                         self.instrumentstatus.status = 'FINISH'
-                        print('Send Commands Fail: ' + self.instruments[self.instrumentstatus.instrumentIndex][0])
+                        print('Tuning PID Arguments Fail: ' + self.instruments[self.instrumentstatus.instrumentIndex][0])
                         print('Reply: ' + self.instrumentstatus.reply)
                 elif self.instrumentstatus.status == 'PROCESS':
                     self.instrumentstatus.status = 'FINISH'
-                    print('Send Commands Timeout ')
+                    print('Tuning PID Arguments Timeout')
                 elif self.instrumentstatus.status == 'CONTINUE':
-                    print('PID tuning: %' + self.instrumentstatus.percent)
+                    print('PID arguments tuning: %' + self.instrumentstatus.percent)
                 else:
-                    print('Send Commands Unknown Error')
+                    print('Tuning PID Arguments Unknown Error')
 
                 time.sleep(1)
 
@@ -279,5 +325,9 @@ def crc32_to_bytes(crc32_value):
 if __name__ == "__main__":
     instrumentstatus = InstrumentStatus()
     controller = TeensyController(instrumentstatus, "/dev/ttyACM0")  # Adjust port as needed
+    print("Start Tuning PID Arguments ..")
+    print("It would take many seconds, you could CTRL-C to stop it")
+    print("")
+    time.sleep(3)
 
     controller.run()

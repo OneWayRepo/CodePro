@@ -134,39 +134,11 @@ void setParameters(const uint8_t* buffer, size_t size) {
 }
 
 void setCommand(const uint8_t* buffer, size_t size) {
-	// debug information
 	strncpy(tcm_transparent_command_buf, (const char *)(&buffer[1]), size);
 	tcm_transparent_command_buf[size - 1] = '\0';
 	tcm_transparent_command_length = size;
 
 	getCMDACK();
-}
-
-void enterIdleState() {
-  for (int i = 0; i < NUM_TEMP_CHANNELS; i++) {
-    channelStates[i] = IDLE;
-    disableLaser(i);
-  }
-}
-
-void disableLaser(int channel) {
-	// 5 channels lasert and 6 temperature channels
-	if (channel >= NUM_LASER_CHANNELS)
-		channel = NUM_LASER_CHANNELS - 1;
-
-  if (channel < NUM_LASER_CHANNELS) {
-    digitalWrite(laserPins[channel], HIGH);
-  }
-}
-
-void enableLaser(int channel) {
-	// 5 channels lasert and 6 temperature channels
-	if (channel >= NUM_LASER_CHANNELS)
-		channel = NUM_LASER_CHANNELS - 1;
-
-  if (channel < NUM_LASER_CHANNELS) {
-    digitalWrite(laserPins[channel], LOW);
-  }
 }
 
 /*
@@ -361,7 +333,7 @@ void tcmQueryCurrentCommand(uint8_t channel_index) {
 }
 
 /*
- transparent command from PC to TCM module	
+ transparent sent command from PC to TCM module	
  */
 void tcmTransparentSend() {
 	if ( tcm_transparent_command_length == 0 )
@@ -517,7 +489,7 @@ void onPacketReceived(const uint8_t* buffer, size_t size) {
     case 'S': // Set parameters
       setParameters(buffer, size - 4);
       break;
-    case 'C': // Set parameters
+    case 'C': // command need to be sent to TCM module 
       setCommand(buffer, size - 4);
       break;
   }
