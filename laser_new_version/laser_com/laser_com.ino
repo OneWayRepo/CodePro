@@ -743,13 +743,24 @@ void loop() {
 
     switch (channelStates[i]) {
       case IDLE:
-        if (tempDiff < -0.5) {
+        if (tempDiff <= -0.5) {
           channelStates[i] = WARM_UP;
+        }
+				else if (tempDiff > -0.5 && tempDiff <= TEMP_ERROR_THRESHOLD) {
+          channelStates[i] = ACTIVE;
+        }
+				else if (tempDiff > TEMP_ERROR_THRESHOLD) {
+          channelStates[i] = ERROR;
+          timeInErrorState[i] = 0;
         }
         break;
       case WARM_UP:
-        if (abs(tempDiff) < 0.5) {
+				if (tempDiff > -0.5 && tempDiff <= TEMP_ERROR_THRESHOLD) {
           channelStates[i] = ACTIVE;
+        }
+				else if (tempDiff > TEMP_ERROR_THRESHOLD) {
+          channelStates[i] = ERROR;
+          timeInErrorState[i] = 0;
         }
         break;
       case ACTIVE:
@@ -766,9 +777,15 @@ void loop() {
         if (timeInErrorState[i] >= ERROR_DURATION) {
           disableLaser(i);
         }
+
         if (abs(tempDiff) < 0.5) {
           channelStates[i] = ACTIVE;
 					// status from ERROR to ACTIVE, restore to enable lasert
+          enableLaser(i);
+        }
+				else if (tempDiff < -0.5) {
+          channelStates[i] = WARM_UP;
+					// status from ERROR to WARM_UP, restore to enable lasert
           enableLaser(i);
         }
         break;
